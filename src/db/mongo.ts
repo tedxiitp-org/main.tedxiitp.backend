@@ -1,5 +1,5 @@
 import { MongoClient } from "mongodb";
-
+import mongoose from "mongoose";
 class MongoManager {
     constructor(private mongoClient: MongoClient | null){ };
     
@@ -9,13 +9,15 @@ class MongoManager {
         }
         this.mongoClient = new MongoClient(mongoUri);
         await this.mongoClient.connect();
-        console.log("Connected to MongoDB");
+        await mongoose.connect(mongoUri);
+        console.log("Connected to MongoDB & Mongoose");
     };
 
     async disconnect(){
         if(this.mongoClient){
+            await mongoose.disconnect();
             await this.mongoClient.close();
-            console.log("Disconnected from MongoDB");
+            console.log("Disconnected from MongoDB & Mongoose");
         }
     };
 
