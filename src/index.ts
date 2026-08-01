@@ -8,6 +8,10 @@ import { sessionMiddleware } from "./config/session.js";
 import passport from "./config/passport.js";
 import authRoutes from "./features/auth/auth.routes.js";
 import memoryRoutes from "./features/memories/memory.routes.js";
+import { usersRoutes } from "./features/users/users.routes.js";
+import { gamesRoutes } from "./features/games/games.routes.js";
+import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
+import { reviewsRoutes } from "./features/reviews/reviews.routes.js";
 
 const app = express();
 
@@ -28,6 +32,10 @@ app.get("/health", (req, res) => {
 app.use("/api/v1/example", exampleRoutes);
 app.use("/api/memories", memoryRoutes);
 app.use("/api/admin/auth", authRoutes);
+app.use("/api/v1/users", usersRoutes);
+app.use("/api/v1/games", gamesRoutes);
+app.use("/api/v1/leaderboard", leaderboardRoutes);
+app.use("/api/v1/reviews", reviewsRoutes);
 
 export async function startServer() {
     try {
