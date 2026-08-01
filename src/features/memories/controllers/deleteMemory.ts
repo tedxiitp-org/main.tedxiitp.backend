@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import Memory from '../../models/memory.model';
+import type { Request, Response } from 'express';
+import Memory from '../memory.model.js';
 
 // @desc    Delete a memory (Admin)
 // @route   DELETE /api/memories/:id

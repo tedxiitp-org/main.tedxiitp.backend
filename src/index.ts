@@ -1,20 +1,15 @@
-import dotenv from 'dotenv';
-dotenv.config();
+import express from "express";
+import cors from "cors";
+import cookieParser from "cookie-parser";
+import { mongoManager } from "./db/mongo.js";
+import { env } from "./config/env.js";
+import { exampleRoutes } from "./features/example/example.routes.js";
+import { sessionMiddleware } from "./config/session.js";
+import passport from "./config/passport.js";
+import authRoutes from "./features/auth/auth.routes.js";
+import memoryRoutes from "./features/memories/memory.routes.js";
 
-import express, { Application } from 'express';
-import cors from 'cors';
-import cookieParser from 'cookie-parser';
-import connectDB from './config/db';
-import { sessionMiddleware } from './config/session';
-import passport from './config/passport';
-import memoryRoutes from './routes/memory.routes';
-import authRoutes from './routes/auth.routes';
-
-const app: Application = express();
-const PORT = process.env.PORT || 3000;
-
-// Connect to Database
-connectDB();
+const app = express();
 
 // Middleware
 app.use(cors());
@@ -25,11 +20,30 @@ app.use(sessionMiddleware);
 app.use(passport.initialize());
 app.use(passport.session());
 
-// Routes
-app.use('/api/memories', memoryRoutes);
-app.use('/api/admin/auth', authRoutes);
-
-// Start the server
-app.listen(PORT, () => {
-    console.log(`Server is running on http://localhost:${PORT}`);
+app.get("/health", (req, res) => {
+    res.status(200).json({ status: "ok", message: "Server is healthy" });
 });
+
+// Routes
+app.use("/api/v1/example", exampleRoutes);
+app.use("/api/memories", memoryRoutes);
+app.use("/api/admin/auth", authRoutes);
+
+export async function startServer() {
+    try {
+        const mongoUri = env.MONGO_URI;
+        const port = env.PORT;
+        
+        console.log("Starting server...");
+        await mongoManager.connect(mongoUri);
+        
+        app.listen(port, () => {
+            console.log(`Server is running on port ${port}`);
+        });
+    }
+    catch (err: any) {
+        console.error("Failed to start server:");
+        console.error(err);
+        process.exit(1);
+    }
+}

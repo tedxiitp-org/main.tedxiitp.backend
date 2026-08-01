@@ -1,5 +1,5 @@
 import rateLimit from 'express-rate-limit';
-import type { ErrorCode } from '../types/index';
+import type { ErrorCode } from '../types/index.js';
 
 export const loginRateLimit = rateLimit({
   windowMs: 60 * 1000, // 1 min

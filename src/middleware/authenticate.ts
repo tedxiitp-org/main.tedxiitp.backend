@@ -1,7 +1,7 @@
 import type { Request, Response, NextFunction } from 'express';
-import { verifyToken } from '../services/token.service';
-import type { AuthenticatedRequest, ErrorCode } from '../types/index';
-import { AUTH_COOKIE_NAME } from '../config/cookie';
+import { verifyToken } from '../services/token.service.js';
+import type { AuthenticatedRequest, ErrorCode } from '../types/index.js';
+import { AUTH_COOKIE_NAME } from '../config/cookie.js';
 
 export function authenticate(
   req: Request,

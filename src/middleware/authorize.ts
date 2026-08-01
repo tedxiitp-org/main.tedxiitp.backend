@@ -1,6 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { AuthenticatedRequest, AdminRole, ErrorCode } from '../types/index';
-import type { IAdmin } from '../models/admin.model';
+import type { AuthenticatedRequest, AdminRole, ErrorCode } from '../types/index.js';
+import type { IAdmin } from '../features/auth/admin.model.js';
 
 export function authorize(...roles: AdminRole[]) {
   return (req: Request, res: Response, next: NextFunction): void => {

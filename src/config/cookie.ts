@@ -1,5 +1,5 @@
 import type { CookieOptions } from 'express';
-import { env } from './env';
+import { env } from './env.js';
 
 export const AUTH_COOKIE_NAME = 'auth_token';
 export const SESSION_COOKIE_NAME = 'sid';

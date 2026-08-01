@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
-import { env } from '../config/env';
-import { Admin } from '../models/admin.model';import { AdminRole } from '../types/index';
+import { env } from '../config/env.js';
+import { Admin } from '../features/auth/admin.model.js';import { AdminRole } from '../types/index.js';
 
 async function seedAdmin() {
   try {

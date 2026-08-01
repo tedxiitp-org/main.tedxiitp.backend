@@ -1,11 +1,11 @@
 import { Router, type Request, type Response, type NextFunction } from 'express';
-import passport from '../config/passport';
-import { loginHandler, meHandler, logoutHandler } from '../controllers/auth.controller';
-import { validateLogin } from '../validators/auth.validator';
-import { authenticate } from '../middleware/authenticate';
-import { loginRateLimit } from '../middleware/rateLimit';
-import type { AuthenticatedRequest, ErrorCode } from '../types/index';
-import type { IAdmin } from '../models/admin.model';
+import passport from '../../config/passport.js';
+import { loginHandler, meHandler, logoutHandler } from './controllers/auth.controller.js';
+import { validateLogin } from './auth.validator.js';
+import { authenticate } from '../../middleware/authenticate.js';
+import { loginRateLimit } from '../../middleware/rateLimit.js';
+import type { AuthenticatedRequest, ErrorCode } from '../../types/index.js';
+import type { IAdmin } from './admin.model.js';
 
 const router = Router();
 

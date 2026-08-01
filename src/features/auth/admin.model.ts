@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Model } from 'mongoose';
-import { AdminRole } from '../types/index';
+import { AdminRole } from '../../types/index.js';
 
 export interface IAdmin extends Document {
   id: string;

@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import Memory, { IMemory } from '../../models/memory.model';
+import type { Request, Response } from 'express';
+import Memory, { type IMemory } from '../memory.model.js';
 
 // @desc    Get all memories
 // @route   GET /api/memories

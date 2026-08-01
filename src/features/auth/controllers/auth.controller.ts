@@ -1,9 +1,9 @@
 import type { Request, Response, NextFunction } from 'express';
-import type { AuthenticatedRequest, JwtPayload, SuccessResponse } from '../types/index';
-import { signToken } from '../services/token.service';
-import { Admin } from '../models/admin.model';
-import type { IAdmin } from '../models/admin.model';
-import { AUTH_COOKIE_NAME, SESSION_COOKIE_NAME, cookieOptions } from '../config/cookie';
+import type { AuthenticatedRequest, JwtPayload, SuccessResponse } from '../../../types/index.js';
+import { signToken } from '../../../services/token.service.js';
+import { Admin } from '../admin.model.js';
+import type { IAdmin } from '../admin.model.js';
+import { AUTH_COOKIE_NAME, SESSION_COOKIE_NAME, cookieOptions } from '../../../config/cookie.js';
 
 // login handeler
 // Runs after Passport has verified credentials and called req.logIn()

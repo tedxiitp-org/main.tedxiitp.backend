@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { Request, Response, NextFunction } from 'express';
-import type { ErrorCode } from '../types/index';
+import type { ErrorCode } from '../../types/index.js';
 
 export const LoginSchema = z.object({
   email: z.string().email({ message: 'Invalid email format' }),

@@ -1,8 +1,8 @@
 import { Router } from 'express';
-import { getMemories, createMemory, likeMemory, unlikeMemory, deleteMemory } from '../controllers/memory';
-import { authenticate } from '../middleware/authenticate';
-import { authorize } from '../middleware/authorize';
-import { AdminRole } from '../types';
+import { getMemories, createMemory, likeMemory, unlikeMemory, deleteMemory } from './controllers/index.js';
+import { authenticate } from '../../middleware/authenticate.js';
+import { authorize } from '../../middleware/authorize.js';
+import { AdminRole } from '../../types/index.js';
 
 const router = Router();
 

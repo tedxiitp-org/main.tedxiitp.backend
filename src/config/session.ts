@@ -1,7 +1,7 @@
 import session from 'express-session';
 import MongoStore from 'connect-mongo';
-import { env } from './env';
-import { SESSION_COOKIE_NAME, cookieOptions } from './cookie';
+import { env } from './env.js';
+import { SESSION_COOKIE_NAME, cookieOptions } from './cookie.js';
 
 export const sessionMiddleware = session({
   name: SESSION_COOKIE_NAME,

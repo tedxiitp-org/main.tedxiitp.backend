@@ -1,7 +1,7 @@
 import type { Request } from 'express';
 import 'express-session';
 
-import type { IAdmin } from '../models/admin.model';
+import type { IAdmin } from '../features/auth/admin.model.js';
 
 export enum AdminRole {
   SuperAdmin = 'super_admin',

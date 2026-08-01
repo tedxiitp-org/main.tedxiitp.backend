@@ -18,7 +18,6 @@ const envSchema = z.object({
   SUPERADMIN_PASSWORD: z.string().min(8, { message: 'SUPERADMIN_PASSWORD must be at least 8 characters' }),
 });
 
-
 const parsedEnv = envSchema.safeParse(process.env);
 
 if (!parsedEnv.success) {

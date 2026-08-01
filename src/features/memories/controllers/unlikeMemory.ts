@@ -1,5 +1,5 @@
-import { Request, Response } from 'express';
-import Memory from '../../models/memory.model';
+import type { Request, Response } from 'express';
+import Memory from '../memory.model.js';
 
 // @desc    Decrement likes for a memory (unlike)
 // @route   PATCH /api/memories/:id/unlike
