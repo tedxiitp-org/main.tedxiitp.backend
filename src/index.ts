@@ -2,6 +2,11 @@ import express from "express";
 import { mongoManager } from "./db/mongo.js";
 import { env } from "./config/env.js";
 import { exampleRoutes } from "./features/example/example.routes.js";
+import { usersRoutes } from "./features/users/users.routes.js";
+import { gamesRoutes } from "./features/games/games.routes.js";
+import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
+import { reviewsRoutes } from "./features/reviews/reviews.routes.js";
+
 
 const app = express();
 
@@ -12,6 +17,11 @@ app.get("/health", (req, res) => {
 });
 
 app.use("/api/v1/example", exampleRoutes);
+app.use("/api/v1/users", usersRoutes);
+app.use("/api/v1/games", gamesRoutes);
+app.use("/api/v1/leaderboard", leaderboardRoutes);
+app.use("/api/v1/reviews", reviewsRoutes);
+
 
 export async function startServer(){
     try{
