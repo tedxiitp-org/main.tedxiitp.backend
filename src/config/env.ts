@@ -7,6 +7,7 @@ dotenv.config();
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
   PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
+  CLIENT_URL: z.string().optional().default('http://localhost:3000'),
   // db
   MONGO_URI: z.string().url({ message: 'MONGO_URI must be a valid connection string' }),
   // security 

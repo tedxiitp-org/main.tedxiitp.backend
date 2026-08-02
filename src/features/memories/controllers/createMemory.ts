@@ -6,7 +6,7 @@ import Memory, { type IMemory } from '../memory.model.js';
 // @access  Public
 export const createMemory = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { name, roleCategory, customRoleTitle, memoryText } = req.body;
+        const { name, roleCategory, memoryText } = req.body;
 
         if (!name || !roleCategory || !memoryText) {
             res.status(400).json({ error: 'Name, Role Category, and Memory Text are required fields.' });
@@ -22,7 +22,6 @@ export const createMemory = async (req: Request, res: Response): Promise<void> =
         const newMemory: IMemory = new Memory({
             name,
             roleCategory,
-            customRoleTitle,
             memoryText
         });
 

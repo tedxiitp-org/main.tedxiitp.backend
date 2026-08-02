@@ -16,7 +16,23 @@ import { reviewsRoutes } from "./features/reviews/reviews.routes.js";
 const app = express();
 
 // Middleware
-app.use(cors());
+const allowedOrigins = [
+    env.CLIENT_URL,
+    "http://localhost:3000",
+    "http://localhost:3001"
+].filter(Boolean) as string[];
+
+app.use(cors({
+    origin: (origin, callback) => {
+        // Allow requests with no origin (like mobile apps, Postman, curl, or server-to-server)
+        if (!origin) return callback(null, true);
+        if (allowedOrigins.includes(origin) || env.NODE_ENV === "development") {
+            return callback(null, true);
+        }
+        return callback(new Error("CORS policy violation: Access denied for this origin."));
+    },
+    credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
