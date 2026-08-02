@@ -12,6 +12,7 @@ export const getMemories = async (req: Request, res: Response): Promise<void> =>
             data: memories
         });
     } catch (err: any) {
-        res.status(500).json({ error: err.message });
+        console.error("Error in getMemories controller:", err);
+        res.status(500).json({ error: err.message || 'Failed to retrieve memories' });
     }
 };

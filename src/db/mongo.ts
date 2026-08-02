@@ -14,7 +14,9 @@ class MongoManager {
             this.mongoClient = new MongoClient(mongoUri);
             await this.mongoClient.connect();
         }
-        await mongoose.connect(mongoUri);
+        await mongoose.connect(mongoUri, {
+            serverSelectionTimeoutMS: 5000,
+        });
         console.log("Connected to MongoDB & Mongoose");
     };
 
