@@ -7,8 +7,13 @@ class MongoManager {
         if(!mongoUri){
             throw new Error("Mongo URI is not defined");
         }
-        this.mongoClient = new MongoClient(mongoUri);
-        await this.mongoClient.connect();
+        if (mongoose.connection.readyState === 1) {
+            return;
+        }
+        if (!this.mongoClient) {
+            this.mongoClient = new MongoClient(mongoUri);
+            await this.mongoClient.connect();
+        }
         await mongoose.connect(mongoUri);
         console.log("Connected to MongoDB & Mongoose");
     };

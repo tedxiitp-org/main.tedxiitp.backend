@@ -53,6 +53,18 @@ app.use("/api/v1/games", gamesRoutes);
 app.use("/api/v1/leaderboard", leaderboardRoutes);
 app.use("/api/v1/reviews", reviewsRoutes);
 
+// Middleware to ensure DB is connected on serverless requests
+app.use(async (req, res, next) => {
+    try {
+        if (env.MONGO_URI) {
+            await mongoManager.connect(env.MONGO_URI);
+        }
+        next();
+    } catch (err) {
+        next(err);
+    }
+});
+
 export async function startServer() {
     try {
         const mongoUri = env.MONGO_URI;
@@ -71,3 +83,5 @@ export async function startServer() {
         process.exit(1);
     }
 }
+
+export default app;

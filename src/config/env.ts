@@ -1,8 +1,12 @@
 import dotenv from 'dotenv';
 import { z } from 'zod';
 
-// load env
-dotenv.config();
+// load env safely (environment variables are injected directly by hosting provider in production)
+try {
+  dotenv.config();
+} catch (e) {
+  // Ignore in serverless environments where .env file is omitted
+}
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
