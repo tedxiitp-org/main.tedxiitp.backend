@@ -17,7 +17,7 @@ const app = express();
 
 // Middleware
 const allowedOrigins = [
-    env.CLIENT_URL,
+    "https://tedxiitpatna.iitp.ac.in",
     "http://localhost:3000",
     "http://localhost:3001"
 ].filter(Boolean) as string[];
