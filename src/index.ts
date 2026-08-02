@@ -44,16 +44,7 @@ app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok", message: "Server is healthy" });
 });
 
-// Routes
-app.use("/api/v1/example", exampleRoutes);
-app.use("/api/memories", memoryRoutes);
-app.use("/api/admin/auth", authRoutes);
-app.use("/api/v1/users", usersRoutes);
-app.use("/api/v1/games", gamesRoutes);
-app.use("/api/v1/leaderboard", leaderboardRoutes);
-app.use("/api/v1/reviews", reviewsRoutes);
-
-// Middleware to ensure DB is connected on serverless requests
+// Middleware to ensure DB is connected on serverless requests (must be registered BEFORE routes)
 app.use(async (req, res, next) => {
     try {
         if (env.MONGO_URI) {
@@ -64,6 +55,15 @@ app.use(async (req, res, next) => {
         next(err);
     }
 });
+
+// Routes
+app.use("/api/v1/example", exampleRoutes);
+app.use("/api/memories", memoryRoutes);
+app.use("/api/admin/auth", authRoutes);
+app.use("/api/v1/users", usersRoutes);
+app.use("/api/v1/games", gamesRoutes);
+app.use("/api/v1/leaderboard", leaderboardRoutes);
+app.use("/api/v1/reviews", reviewsRoutes);
 
 export async function startServer() {
     try {
