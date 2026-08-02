@@ -15,8 +15,16 @@ import { reviewsRoutes } from "./features/reviews/reviews.routes.js";
 
 const app = express();
 
+const allowedOrigins = [
+    "https://tedxiitpatna.iitp.ac.in",
+    "http://localhost:3000",
+];
+
 // Middleware
-app.use(cors());
+app.use(cors({
+    origin: allowedOrigins,
+    credentials: true,
+}));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
