@@ -8,6 +8,7 @@ import { sessionMiddleware } from "./config/session.js";
 import passport from "./config/passport.js";
 import authRoutes from "./features/auth/auth.routes.js";
 import memoryRoutes from "./features/memories/memory.routes.js";
+import communityWallRoutes from "./features/community-wall/communityWall.routes.js";
 import { usersRoutes } from "./features/users/users.routes.js";
 import { gamesRoutes } from "./features/games/games.routes.js";
 import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
@@ -59,6 +60,10 @@ app.use(async (req, res, next) => {
 // Routes
 app.use("/api/v1/example", exampleRoutes);
 app.use("/api/memories", memoryRoutes);
+app.use("/api/community-wall", communityWallRoutes);
+app.use("/api/v1/community-wall", communityWallRoutes);
+app.use("/api/wall", communityWallRoutes);
+app.use("/api/v1/wall", communityWallRoutes);
 app.use("/api/admin/auth", authRoutes);
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/games", gamesRoutes);
