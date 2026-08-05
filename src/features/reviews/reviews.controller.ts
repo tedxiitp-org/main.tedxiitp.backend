@@ -2,21 +2,24 @@ import type { Request, Response } from "express";
 import type { Model } from "mongoose";
 import type { IReview } from "./interface/index.js";
 import { getReviewModel } from "./reviews.models.js";
+import { getUserModel } from "../users/users.models.js";
 
 export class ReviewsController {
     private reviewModel: Model<IReview>;
+    private userModel: any;
     
     constructor(){
         this.reviewModel = getReviewModel();
+        this.userModel = getUserModel();
     }
     
     // POST /reviews
     createReview = async (req: Request, res: Response): Promise<void> => {
         try {
-            const { userId, text, rating } = req.body;
+            const { userId, gameId, text, rating } = req.body;
             
-            if (!userId || !text || rating === undefined) {
-                res.status(400).json({ error: "userId, text, and rating are required" });
+            if (!userId || !gameId || !text || rating === undefined) {
+                res.status(400).json({ error: "userId, gameId, text, and rating are required" });
                 return;
             }
 
@@ -25,7 +28,13 @@ export class ReviewsController {
                 return;
             }
 
-            const review = await this.reviewModel.create({ userId, text, rating });
+            const user = await this.userModel.findById(userId);
+            if (!user) {
+                res.status(404).json({ error: "User not found" });
+                return;
+            }
+
+            const review = await this.reviewModel.create({ userId, gameId, text, rating });
             res.status(201).json({ message: "Review created successfully", data: review });
         } catch (error) {
             console.error(error);
@@ -39,16 +48,23 @@ export class ReviewsController {
             const page = parseInt(req.query.page as string) || 1;
             const limit = parseInt(req.query.limit as string) || 10;
             const skip = (page - 1) * limit;
+            const gameId = req.query.gameId as string;
+
+            const query: any = {};
+            if (gameId) {
+                query.gameId = gameId;
+            }
 
             const reviews = await this.reviewModel
-                .find({})
+                .find(query)
                 .sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .populate("userId", "username") // Assumes User model exists
+                .populate("gameId", "name") // Option to populate game name
                 .exec();
 
-            const total = await this.reviewModel.countDocuments();
+            const total = await this.reviewModel.countDocuments(query);
 
             res.status(200).json({
                 data: reviews,
