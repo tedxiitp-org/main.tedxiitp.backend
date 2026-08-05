@@ -100,25 +100,3 @@ The backend handles Game Type A and Type B differently. Type A expects a `rawSco
 * **URL:** `http://localhost:3000/api/v1/leaderboard/<GAME_A_ID>` (or `<GAME_B_ID>`)
 * **Expected Result:** Returns the top players for that specific game, sorted by `finalScore`.
 
----
-
-## 5. Community & Reviews
-
-### Leave a Review
-* **Method:** `POST`
-* **URL:** `http://localhost:3000/api/v1/reviews`
-* **Body (raw JSON):**
-  ```json
-  {
-      "userId": "<YOUR_USER_ID>",
-      "gameId": "<GAME_A_ID>",
-      "text": "The puzzle game was challenging but very rewarding!",
-      "rating": 5
-  }
-  ```
-* **Expected Result:** The review is created and returned. (Returns `404 User not found` if `userId` is invalid).
-
-### View All Reviews
-* **Method:** `GET`
-* **URL:** `http://localhost:3000/api/v1/reviews?gameId=<GAME_A_ID>&page=1&limit=10`
-* **Expected Result:** Returns paginated reviews, populating the `username` field automatically so the frontend doesn't have to look it up.
