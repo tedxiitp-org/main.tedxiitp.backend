@@ -1,26 +1,34 @@
-import dotenv from "dotenv";
+import dotenv from 'dotenv';
+import { z } from 'zod';
 
-dotenv.configDotenv();
+// load env safely (environment variables are injected directly by hosting provider in production)
+try {
+  dotenv.config();
+} catch (e) {
+  // Ignore in serverless environments where .env file is omitted
+}
 
-const sanitizeString = (variableName: string, value: string | undefined) => {
-    if (!value) {
-        throw new Error(`Environment variable ${variableName} is not defined`);
-    }
-    return value as string;
-};
+const envSchema = z.object({
+  NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
+  PORT: z.string().default('5000').transform((val) => parseInt(val, 10)),
+  CLIENT_URL: z.string().optional().default('http://localhost:3000'),
+  // db
+  MONGO_URI: z.string().url({ message: 'MONGO_URI must be a valid connection string' }),
+  // security 
+  JWT_SECRET: z.string().min(16, { message: 'JWT_SECRET must be at least 16 characters' }),
+  SESSION_SECRET: z.string().min(16, { message: 'SESSION_SECRET must be at least 16 characters' }),
+  
+  // Admin Credentials
+  SUPERADMIN_EMAIL: z.string().email({ message: 'SUPERADMIN_EMAIL must be a valid email' }),
+  SUPERADMIN_PASSWORD: z.string().min(8, { message: 'SUPERADMIN_PASSWORD must be at least 8 characters' }),
+});
 
-const sanitizeNumber = (variableName: string, value: string | undefined) => {
-    if (!value) {
-        throw new Error(`Environment variable ${variableName} is not defined`);
-    }
-    const parsed = Number(value);
-    if (isNaN(parsed)) {
-        throw new Error(`Environment variable ${variableName} is not a valid number`);
-    }
-    return parsed;
-};
+const parsedEnv = envSchema.safeParse(process.env);
 
-export const env = {
-    PORT: sanitizeNumber("PORT", process.env.PORT),
-    MONGO_URI: sanitizeString("MONGO_URI", process.env.MONGO_URI)
-};
+if (!parsedEnv.success) {
+  console.error('Invalid env detected on boot:');
+  console.error(parsedEnv.error.format());
+  process.exit(1);
+}
+
+export const env = parsedEnv.data;
