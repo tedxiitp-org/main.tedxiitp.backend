@@ -12,7 +12,6 @@ import communityWallRoutes from "./features/community-wall/communityWall.routes.
 import { usersRoutes } from "./features/users/users.routes.js";
 import { gamesRoutes } from "./features/games/games.routes.js";
 import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
-import { reviewsRoutes } from "./features/reviews/reviews.routes.js";
 
 const app = express();
 
@@ -68,7 +67,6 @@ app.use("/api/admin/auth", authRoutes);
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/games", gamesRoutes);
 app.use("/api/v1/leaderboard", leaderboardRoutes);
-app.use("/api/v1/reviews", reviewsRoutes);
 
 export async function startServer() {
     try {

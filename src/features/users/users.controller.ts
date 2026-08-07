@@ -21,9 +21,12 @@ export class UsersController {
 
             let user = await this.userModel.findOne({ username });
             
-            if (!user) {
-                user = await this.userModel.create({ username });
+            if (user) {
+                res.status(409).json({ error: "Username is already taken" });
+                return;
             }
+            
+            user = await this.userModel.create({ username });
             
             res.status(200).json({
                 message: "Identity retrieved successfully",

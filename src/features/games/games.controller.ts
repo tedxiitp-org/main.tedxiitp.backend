@@ -2,14 +2,17 @@ import type { Request, Response } from "express";
 import type { Model } from "mongoose";
 import type { IGame, IGameStats } from "./interface/index.js";
 import { getGameModel, getGameStatsModel } from "./games.models.js";
+import { getUserModel } from "../users/users.models.js";
 
 export class GamesController {
     private gameModel: Model<IGame>;
     private gameStatsModel: Model<IGameStats>;
+    private userModel: any;
     
     constructor(){
         this.gameModel = getGameModel();
         this.gameStatsModel = getGameStatsModel();
+        this.userModel = getUserModel();
     }
     
     // GET /games
@@ -55,6 +58,12 @@ export class GamesController {
             const game = await this.gameModel.findById(gameId);
             if (!game) {
                 res.status(404).json({ error: "Game not found" });
+                return;
+            }
+
+            const user = await this.userModel.findById(userId);
+            if (!user) {
+                res.status(404).json({ error: "User not found" });
                 return;
             }
 
