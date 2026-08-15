@@ -1,6 +1,6 @@
 import type { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { Admin } from '../model/admin.model.js';
+import { QRAdmin as Admin } from '../model/admin.model.js';
 
 // Create a volunteer account with the email + password chosen by the admin.
 export const createVolunteer = async (req: Request, res: Response): Promise<any> => {

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { generateTicket } from '../controller/qr.controller.js';
 import { validateScan } from '../controller/qr.controller.js';
+import { loginAdmin, logoutAdmin } from '../controller/auth.controller.js';
 
 import {
   getStats,
@@ -39,5 +40,9 @@ router.post('/generate-bulk', requireAuth, requireAdmin, generateTicketsBulk);
 
 // Volunteer Route: Requires login, but NO admin check
 router.post('/validate', requireAuth, validateScan);
+
+// Auth Routes (mapped to /api/qr/auth/*)
+router.post('/auth/login', loginAdmin);
+router.post('/auth/logout', logoutAdmin);
 
 export default router;

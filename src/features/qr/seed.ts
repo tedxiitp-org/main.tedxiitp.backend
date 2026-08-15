@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
 import dotenv from 'dotenv';
 import path from 'path';
-import { Admin } from './model/admin.model.js';
+import { QRAdmin as Admin } from './model/admin.model.js';
 import { Counter } from './model/counter.model.js';
 
 // Load env (no-op on hosts like Render where vars come from the environment).
