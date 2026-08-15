@@ -12,6 +12,8 @@ import communityWallRoutes from "./features/community-wall/communityWall.routes.
 import { usersRoutes } from "./features/users/users.routes.js";
 import { gamesRoutes } from "./features/games/games.routes.js";
 import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
+import qrRoutes from "./features/qr/routes/qr.routes.js";
+import { seedDatabase } from "./features/qr/seed.js";
 
 const app = express();
 
@@ -67,6 +69,7 @@ app.use("/api/admin/auth", authRoutes);
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/games", gamesRoutes);
 app.use("/api/v1/leaderboard", leaderboardRoutes);
+app.use("/api/qr", qrRoutes);
 
 export async function startServer() {
     try {
@@ -75,6 +78,15 @@ export async function startServer() {
         
         console.log("Starting server...");
         await mongoManager.connect(mongoUri);
+        
+        if (env.NODE_ENV !== 'test' && process.env.SEED_ON_BOOT !== 'false') {
+            console.log('Seeding QR database from environment...');
+            try {
+                await seedDatabase();
+            } catch (err) {
+                console.error('Seed-on-boot failed (continuing without it):', err);
+            }
+        }
         
         app.listen(port, () => {
             console.log(`Server is running on port ${port}`);
