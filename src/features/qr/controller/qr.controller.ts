@@ -1,9 +1,11 @@
-import type { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import { Ticket } from '../model/ticket.model.js';
-import { generateTicketAndQR, DuplicateTicketError } from '../service/qr.service.js';
+import { generateTicketAndQR, DuplicateTicketError, DuplicateTransactionError } from '../service/qr.service.js';
 import { validateTicketScan, revokeTicket } from '../service/validation.service.js';
 import { getAttendanceStats, getVolunteerScanStats } from '../service/attendance.service.js';
 import { sendTicketEmail, isEmailConfigured } from '../service/email.service.js';
+import { BulkJob, BulkJobItem } from '../model/bulkjob.model.js';
+import pLimit from 'p-limit';
 
 type ValidSession = "SESSION_1" | "SESSION_2";
 
@@ -58,7 +60,7 @@ export const generateTicket = async (req: Request, res: Response): Promise<any> 
     });
 
   } catch (error: any) {
-    if (error instanceof DuplicateTicketError) {
+    if (error instanceof DuplicateTicketError || error instanceof DuplicateTransactionError) {
       return res.status(409).json({ success: false, error: error.message });
     }
     console.error("QR Generation Error:", error);
@@ -66,15 +68,69 @@ export const generateTicket = async (req: Request, res: Response): Promise<any> 
   }
 };
 
-// Bulk generation from a CSV upload (parsed client-side into rows). One HTTP
-// request produces many tickets + emails so the API rate limiter isn't tripped.
-// Each row is independent: a duplicate/error on one does not abort the rest.
+// Async worker to process the queue in the background
+const bulkWorker = async (jobId: string, attendees: any[], validSession: ValidSession) => {
+  const limit = pLimit(5); // 5 concurrent operations
+
+  await BulkJob.findByIdAndUpdate(jobId, { status: 'PROCESSING' });
+
+  const tasks = attendees.map((attendee) =>
+    limit(async () => {
+      const email = (attendee?.email || "").trim();
+      let status: 'generated' | 'duplicate' | 'error' = 'error';
+      let message: string | undefined = undefined;
+      let ticketId: string | undefined = undefined;
+      let emailSent = false;
+
+      if (!email) {
+        status = 'error';
+        message = 'Missing email';
+      } else if (!attendee?.transactionId) {
+        status = 'error';
+        message = 'Missing transaction ID';
+      } else {
+        try {
+          const ticketData = await generateTicketAndQR(email, validSession, attendee.transactionId, attendee.name);
+          const emailResult = await tryEmailTicket(email, attendee.name, ticketData, validSession);
+          status = 'generated';
+          ticketId = ticketData.ticketId;
+          emailSent = emailResult.emailSent;
+          message = emailResult.emailError;
+        } catch (error: any) {
+          if (error instanceof DuplicateTicketError || error instanceof DuplicateTransactionError) {
+            status = 'duplicate';
+            message = error.message;
+          } else {
+            console.error(`Bulk generate failed for ${email}:`, error?.message || error);
+            status = 'error';
+            message = 'Generation failed';
+          }
+        }
+      }
+
+      await BulkJobItem.findOneAndUpdate(
+        { jobId, email },
+        { status, ticketId, emailSent, message }
+      );
+
+      await BulkJob.findByIdAndUpdate(jobId, { $inc: { processedRecords: 1 } });
+    })
+  );
+
+  await Promise.allSettled(tasks);
+  await BulkJob.findByIdAndUpdate(jobId, { status: 'COMPLETED' });
+};
+
+// Bulk generation from a CSV upload
 export const generateTicketsBulk = async (req: Request, res: Response): Promise<any> => {
   try {
     const { attendees, session } = req.body as {
       attendees: { email: string; transactionId: string; name?: string }[];
       session: string;
     };
+
+    const adminId = (req as any).user?._id || (req as any).user?.id;
+    if (!adminId) return res.status(401).json({ error: "Unauthorized" });
 
     if (!Array.isArray(attendees) || attendees.length === 0) {
       return res.status(400).json({ error: "attendees array is required" });
@@ -84,46 +140,71 @@ export const generateTicketsBulk = async (req: Request, res: Response): Promise<
     }
     const validSession = session as ValidSession;
 
-    const results = [];
-    // Sequential: keeps memory/SMTP load predictable and preserves row order.
-    for (const attendee of attendees) {
-      const email = (attendee?.email || "").trim();
-      if (!email) {
-        results.push({ email: attendee?.email || "", status: "error", message: "Missing email" });
-        continue;
-      }
-      if (!attendee?.transactionId) {
-        results.push({ email: attendee?.email || "", status: "error", message: "Missing transaction ID" });
-        continue;
-      }
-      try {
-        const ticketData = await generateTicketAndQR(email, validSession, attendee.transactionId, attendee.name);
-        const emailResult = await tryEmailTicket(email, attendee.name, ticketData, validSession);
-        results.push({
-          email,
-          status: "generated",
-          ticketId: ticketData.ticketId,
-          emailSent: emailResult.emailSent,
-          message: emailResult.emailError,
-        });
-      } catch (error: any) {
-        if (error instanceof DuplicateTicketError) {
-          results.push({ email, status: "duplicate", message: error.message });
-        } else {
-          console.error(`Bulk generate failed for ${email}:`, error?.message || error);
-          results.push({ email, status: "error", message: "Generation failed" });
-        }
-      }
+    // Idempotency Check: Reject if there is already a PENDING or PROCESSING job for this admin
+    const activeJob = await BulkJob.findOne({ adminId, status: { $in: ['PENDING', 'PROCESSING'] } });
+    if (activeJob) {
+      return res.status(409).json({ success: false, error: "An active bulk generation job is already running." });
     }
 
-    const generated = results.filter((r) => r.status === "generated").length;
-    return res.status(200).json({
+    const job = await BulkJob.create({
+      adminId,
+      session: validSession,
+      totalRecords: attendees.length,
+      processedRecords: 0,
+      status: 'PENDING'
+    });
+
+    const items = attendees.map(a => ({
+      jobId: job._id,
+      email: (a?.email || "").trim(),
+      name: a?.name,
+      transactionId: a?.transactionId || "",
+      status: 'pending'
+    }));
+    await BulkJobItem.insertMany(items);
+
+    // Trigger async processing
+    bulkWorker(job._id.toString(), attendees, validSession).catch(err => {
+      console.error("Bulk Worker crashed:", err);
+      BulkJob.findByIdAndUpdate(job._id, { status: 'FAILED' }).exec();
+    });
+
+    return res.status(202).json({
       success: true,
-      message: `Generated ${generated} of ${attendees.length} ticket(s).`,
-      data: results,
+      message: `Bulk job accepted for ${attendees.length} ticket(s).`,
+      jobId: job._id
     });
   } catch (error) {
     console.error("Bulk Generation Error:", error);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
+
+export const getBulkJobStatus = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const adminId = (req as any).user?._id || (req as any).user?.id;
+    if (!adminId) return res.status(401).json({ error: "Unauthorized" });
+
+    const jobId = req.params.jobId;
+    const job = await BulkJob.findOne({ _id: jobId, adminId });
+    if (!job) {
+      return res.status(404).json({ error: "Job not found or unauthorized" });
+    }
+
+    const items = await BulkJobItem.find({ jobId }).lean();
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        jobId: job._id,
+        status: job.status,
+        totalRecords: job.totalRecords,
+        processedRecords: job.processedRecords,
+        items
+      }
+    });
+  } catch (error) {
+    console.error("Bulk Job Status Error:", error);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };

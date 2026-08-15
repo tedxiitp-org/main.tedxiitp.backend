@@ -23,7 +23,7 @@ const ticketSchema = new Schema<ITicket>({
   name: { type: String },
   userId: { type: String, required: true },
   session: { type: String, enum: ["SESSION_1", "SESSION_2"], required: true },
-  transactionId: { type: String, required: true },
+  transactionId: { type: String, required: true, unique: true },
   qrToken: { type: String, required: true },
   status: { type: String, enum: ["ACTIVE", "REVOKED", "USED"], default: "ACTIVE" },
   isCheckedIn: { type: Boolean, default: false },
