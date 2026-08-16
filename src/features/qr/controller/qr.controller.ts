@@ -69,29 +69,35 @@ export const generateTicket = async (req: Request, res: Response): Promise<any> 
 };
 
 // Async worker to process the queue in the background
-const bulkWorker = async (jobId: string, attendees: any[], validSession: ValidSession) => {
+const bulkWorker = async (jobId: string) => {
   const limit = pLimit(5); // 5 concurrent operations
 
   await BulkJob.findByIdAndUpdate(jobId, { status: 'PROCESSING' });
 
-  const tasks = attendees.map((attendee) =>
+  const items = await BulkJobItem.find({ jobId, status: 'pending' });
+
+  const tasks = items.map((item) =>
     limit(async () => {
-      const email = (attendee?.email || "").trim();
+      const email = (item.email || "").trim();
       let status: 'generated' | 'duplicate' | 'error' = 'error';
       let message: string | undefined = undefined;
       let ticketId: string | undefined = undefined;
       let emailSent = false;
+      const validSession = item.session as ValidSession;
 
       if (!email) {
         status = 'error';
         message = 'Missing email';
-      } else if (!attendee?.transactionId) {
+      } else if (!item.transactionId) {
         status = 'error';
         message = 'Missing transaction ID';
+      } else if (validSession !== 'SESSION_1' && validSession !== 'SESSION_2') {
+        status = 'error';
+        message = 'Invalid session';
       } else {
         try {
-          const ticketData = await generateTicketAndQR(email, validSession, attendee.transactionId, attendee.name);
-          const emailResult = await tryEmailTicket(email, attendee.name, ticketData, validSession);
+          const ticketData = await generateTicketAndQR(email, validSession, item.transactionId, item.name);
+          const emailResult = await tryEmailTicket(email, item.name, ticketData, validSession);
           status = 'generated';
           ticketId = ticketData.ticketId;
           emailSent = emailResult.emailSent;
@@ -101,15 +107,14 @@ const bulkWorker = async (jobId: string, attendees: any[], validSession: ValidSe
             status = 'duplicate';
             message = error.message;
           } else {
-            console.error(`Bulk generate failed for ${email}:`, error?.message || error);
+            console.error(`Bulk generate failed for ${email} in ${validSession}:`, error?.message || error);
             status = 'error';
             message = 'Generation failed';
           }
         }
       }
 
-      await BulkJobItem.findOneAndUpdate(
-        { jobId, email },
+      await BulkJobItem.findByIdAndUpdate(item._id,
         { status, ticketId, emailSent, message }
       );
 
@@ -121,12 +126,10 @@ const bulkWorker = async (jobId: string, attendees: any[], validSession: ValidSe
   await BulkJob.findByIdAndUpdate(jobId, { status: 'COMPLETED' });
 };
 
-// Bulk generation from a CSV upload
 export const generateTicketsBulk = async (req: Request, res: Response): Promise<any> => {
   try {
-    const { attendees, session } = req.body as {
-      attendees: { email: string; transactionId: string; name?: string }[];
-      session: string;
+    const { attendees } = req.body as {
+      attendees: { email: string; transactionId: string; name?: string; session: string }[];
     };
 
     const adminId = (req as any).user?._id || (req as any).user?.id;
@@ -135,10 +138,6 @@ export const generateTicketsBulk = async (req: Request, res: Response): Promise<
     if (!Array.isArray(attendees) || attendees.length === 0) {
       return res.status(400).json({ error: "attendees array is required" });
     }
-    if (session !== "SESSION_1" && session !== "SESSION_2") {
-      return res.status(400).json({ error: "Invalid session type. Must be SESSION_1 or SESSION_2" });
-    }
-    const validSession = session as ValidSession;
 
     // Idempotency Check: Reject if there is already a PENDING or PROCESSING job for this admin
     const activeJob = await BulkJob.findOne({ adminId, status: { $in: ['PENDING', 'PROCESSING'] } });
@@ -148,7 +147,6 @@ export const generateTicketsBulk = async (req: Request, res: Response): Promise<
 
     const job = await BulkJob.create({
       adminId,
-      session: validSession,
       totalRecords: attendees.length,
       processedRecords: 0,
       status: 'PENDING'
@@ -159,12 +157,13 @@ export const generateTicketsBulk = async (req: Request, res: Response): Promise<
       email: (a?.email || "").trim(),
       name: a?.name,
       transactionId: a?.transactionId || "",
+      session: a?.session || "UNRECOGNIZED",
       status: 'pending'
     }));
     await BulkJobItem.insertMany(items);
 
     // Trigger async processing
-    bulkWorker(job._id.toString(), attendees, validSession).catch(err => {
+    bulkWorker(job._id.toString()).catch(err => {
       console.error("Bulk Worker crashed:", err);
       BulkJob.findByIdAndUpdate(job._id, { status: 'FAILED' }).exec();
     });
@@ -205,6 +204,45 @@ export const getBulkJobStatus = async (req: Request, res: Response): Promise<any
     });
   } catch (error) {
     console.error("Bulk Job Status Error:", error);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
+  }
+};
+
+export const checkDuplicates = async (req: Request, res: Response): Promise<any> => {
+  try {
+    const { items } = req.body as { items: { email: string; session: string; transactionId: string }[] };
+    
+    if (!Array.isArray(items)) {
+      return res.status(400).json({ error: "items array is required" });
+    }
+
+    const adminId = (req as any).user?._id || (req as any).user?.id;
+    if (!adminId) return res.status(401).json({ error: "Unauthorized" });
+
+    // For each item, check if a Ticket exists or if the transactionId is already used
+    const results = await Promise.all(items.map(async (item) => {
+      if (item.session === 'UNRECOGNIZED') {
+         return { email: item.email, session: item.session, exists: false };
+      }
+      
+      const existingTicket = await Ticket.findOne({ email: item.email, session: item.session });
+      if (existingTicket) {
+        return { email: item.email, session: item.session, exists: true, reason: "Email already registered for this session" };
+      }
+
+      if (item.transactionId) {
+        const existingTxn = await Ticket.findOne({ transactionId: item.transactionId });
+        if (existingTxn) {
+          return { email: item.email, session: item.session, exists: true, reason: "Transaction ID already used" };
+        }
+      }
+
+      return { email: item.email, session: item.session, exists: false };
+    }));
+
+    return res.status(200).json({ success: true, data: results });
+  } catch (error) {
+    console.error("checkDuplicates Error:", error);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };

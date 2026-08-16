@@ -1,7 +1,7 @@
-import type { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import { QRAdmin as Admin } from '../model/admin.model.js';
+import { Admin } from '../model/admin.model.js';
 
 export const loginAdmin = async (req: Request, res: Response): Promise<any> => {
   try {

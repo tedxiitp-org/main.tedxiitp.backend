@@ -1,6 +1,6 @@
-import type { Request, Response } from 'express';
+import { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
-import { QRAdmin as Admin } from '../model/admin.model.js';
+import { Admin } from '../model/admin.model.js';
 
 // Create a volunteer account with the email + password chosen by the admin.
 export const createVolunteer = async (req: Request, res: Response): Promise<any> => {
@@ -52,7 +52,7 @@ export const listVolunteers = async (req: Request, res: Response): Promise<any> 
 // Delete a volunteer by id. Guards against deleting admin accounts.
 export const deleteVolunteer = async (req: Request, res: Response): Promise<any> => {
   try {
-    const id = String(req.params.id);
+    const { id } = req.params;
 
     const volunteer = await Admin.findOne({ _id: id, role: "VOLUNTEER" });
     if (!volunteer) {

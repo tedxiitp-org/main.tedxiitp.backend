@@ -1,7 +1,6 @@
 import { Router } from 'express';
-import { generateTicket } from '../controller/qr.controller.js';
-import { validateScan } from '../controller/qr.controller.js';
-import { loginAdmin, logoutAdmin } from '../controller/auth.controller.js';
+import { generateTicket } from '../controller/qr.controller';
+import { validateScan } from '../controller/qr.controller';
 
 import {
   getStats,
@@ -11,13 +10,15 @@ import {
   generateTicketsBulk,
   getAttendees,
   exportAttendees,
+  getBulkJobStatus,
+  checkDuplicates,
 } from '../controller/qr.controller.js';
 import {
   createVolunteer,
   listVolunteers,
   deleteVolunteer,
-} from '../controller/volunteer.controller.js';
-import { requireAuth, requireAdmin } from '../middleware/auth.middleware.js';
+} from '../controller/volunteer.controller';
+import { requireAuth, requireAdmin } from '../../../middleware/auth.middleware';
 
 const router = Router();
 
@@ -37,12 +38,10 @@ router.delete('/admin/volunteers/:id', requireAuth, requireAdmin, deleteVoluntee
 // Endpoint: POST /api/qr/generate
 router.post('/generate', requireAuth, requireAdmin, generateTicket);
 router.post('/generate-bulk', requireAuth, requireAdmin, generateTicketsBulk);
+router.post('/admin/ticket/check-duplicates', requireAuth, requireAdmin, checkDuplicates);
+router.get('/bulk-status/:jobId', requireAuth, requireAdmin, getBulkJobStatus);
 
 // Volunteer Route: Requires login, but NO admin check
 router.post('/validate', requireAuth, validateScan);
-
-// Auth Routes (mapped to /api/qr/auth/*)
-router.post('/auth/login', loginAdmin);
-router.post('/auth/logout', logoutAdmin);
 
 export default router;

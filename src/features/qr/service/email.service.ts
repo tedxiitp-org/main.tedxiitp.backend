@@ -1,5 +1,4 @@
-import nodemailer from 'nodemailer';
-import type { Transporter } from 'nodemailer';
+import nodemailer, { Transporter } from 'nodemailer';
 import type SMTPTransport from 'nodemailer/lib/smtp-transport/index.js';
 import dns from 'node:dns/promises';
 import net from 'node:net';
@@ -78,7 +77,7 @@ const getTransporter = async (): Promise<Transporter> => {
 
 interface TicketEmailInput {
   to: string;
-  name?: string | undefined;
+  name?: string;
   ticketId: string;
   session: 'SESSION_1' | 'SESSION_2';
   qrDataUrl: string; // data:image/png;base64,....
