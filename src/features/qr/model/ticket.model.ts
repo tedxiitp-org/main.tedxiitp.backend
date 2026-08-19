@@ -23,14 +23,13 @@ const ticketSchema = new Schema<ITicket>({
   name: { type: String },
   userId: { type: String, required: true },
   session: { type: String, enum: ["SESSION_1", "SESSION_2"], required: true },
-  transactionId: { type: String, required: true, unique: true },
+  transactionId: { type: String, required: true },
   qrToken: { type: String, required: true },
   status: { type: String, enum: ["ACTIVE", "REVOKED", "USED"], default: "ACTIVE" },
   isCheckedIn: { type: Boolean, default: false },
   checkedInAt: { type: Date }
 }, { timestamps: true });
 
-// An attendee (identified by email) may hold at most one ticket per session.
-ticketSchema.index({ email: 1, session: 1 }, { unique: true });
+// (An attendee may hold multiple tickets per session if they have multiple transaction IDs)
 
 export const Ticket = mongoose.model<ITicket>('Ticket', ticketSchema);

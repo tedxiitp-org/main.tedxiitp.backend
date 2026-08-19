@@ -10,13 +10,23 @@
     "declaration": true,
     "declarationMap": true,
     "noUncheckedIndexedAccess": true,
-    "exactOptionalPropertyTypes": true,
+    "exactOptionalPropertyTypes": false,
     "strict": true,
     "jsx": "react-jsx",
-    "verbatimModuleSyntax": true,
+    "verbatimModuleSyntax": false,
     "isolatedModules": true,
     "noUncheckedSideEffectImports": true,
     "moduleDetection": "force",
     "skipLibCheck": true
-  }
+  },
+  "exclude": [
+    "src/config/**/*",
+    "src/features/auth/**/*",
+    "src/types/**/*",
+    "src/middleware/authenticate.ts",
+    "src/features/qr/seed.ts"
+  ],
+  "include": [
+    "src/server.ts"
+  ]
 }

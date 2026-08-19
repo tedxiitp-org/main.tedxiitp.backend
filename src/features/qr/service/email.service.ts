@@ -153,11 +153,18 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
     subject: `Your TEDxIITPatna Ticket — ${prettySession(session)}`,
     html,
     attachments: [
+      // 1. Inline QR code for the HTML template
       {
-        filename: `${ticketId}.png`,
+        filename: `qr-inline-${ticketId}.png`,
         content: qrBuffer,
         contentType: 'image/png',
-        cid: 'ticket-qr', // referenced by the inline <img src="cid:ticket-qr">
+        cid: 'ticket-qr', 
+      },
+      // 2. Downloadable attachment at the bottom of the email
+      {
+        filename: `TEDx_Ticket_QR_${ticketId}.png`,
+        content: qrBuffer,
+        contentType: 'image/png',
       },
     ],
   });

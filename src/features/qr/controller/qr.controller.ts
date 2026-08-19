@@ -70,7 +70,7 @@ export const generateTicket = async (req: Request, res: Response): Promise<any> 
 
 // Async worker to process the queue in the background
 const bulkWorker = async (jobId: string) => {
-  const limit = pLimit(5); // 5 concurrent operations
+  const limit = pLimit(1); // Process 1 at a time to prevent SMTP rate limits
 
   await BulkJob.findByIdAndUpdate(jobId, { status: 'PROCESSING' });
 
@@ -102,6 +102,9 @@ const bulkWorker = async (jobId: string) => {
           ticketId = ticketData.ticketId;
           emailSent = emailResult.emailSent;
           message = emailResult.emailError;
+          
+          // Add a small delay between emails to avoid spam/rate limit blocks from SMTP providers
+          await new Promise(resolve => setTimeout(resolve, 1500));
         } catch (error: any) {
           if (error instanceof DuplicateTicketError || error instanceof DuplicateTransactionError) {
             status = 'duplicate';
@@ -224,16 +227,16 @@ export const checkDuplicates = async (req: Request, res: Response): Promise<any>
       if (item.session === 'UNRECOGNIZED') {
          return { email: item.email, session: item.session, exists: false };
       }
-      
-      const existingTicket = await Ticket.findOne({ email: item.email, session: item.session });
-      if (existingTicket) {
-        return { email: item.email, session: item.session, exists: true, reason: "Email already registered for this session" };
-      }
-
-      if (item.transactionId) {
-        const existingTxn = await Ticket.findOne({ transactionId: item.transactionId });
-        if (existingTxn) {
-          return { email: item.email, session: item.session, exists: true, reason: "Transaction ID already used" };
+      // Check if this exact ticket (same email, session, and transactionId) is already generated
+      if (item.email && item.session && item.transactionId) {
+        const existingTicket = await Ticket.findOne({
+          email: item.email,
+          session: item.session as "SESSION_1" | "SESSION_2",
+          transactionId: item.transactionId
+        });
+        
+        if (existingTicket) {
+          return { email: item.email, session: item.session, exists: true, reason: "Ticket already generated" };
         }
       }
 

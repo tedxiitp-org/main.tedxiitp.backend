@@ -53,21 +53,9 @@ export const generateTicketAndQR = async (
     throw new Error("transactionId is required to generate a ticket");
   }
 
-  // Reject up front if this transactionId is already used globally.
-  const existingTransaction = await Ticket.findOne({ transactionId });
-  if (existingTransaction) {
-    throw new DuplicateTransactionError(
-      `Transaction ID ${transactionId} has already been used for another ticket.`
-    );
-  }
+  // (Transaction IDs can be duplicated if an attendee pays for multiple tickets or both sessions together)
 
-  // Reject up front if this email already has a ticket for this session.
-  const existing = await Ticket.findOne({ email: normalizedEmail, session });
-  if (existing) {
-    throw new DuplicateTicketError(
-      `A ticket for ${normalizedEmail} already exists for ${session}.`
-    );
-  }
+
 
   const ticketId = await generateTicketId(session);
 
@@ -108,16 +96,8 @@ export const generateTicketAndQR = async (
       qrToken: qrToken
     };
   } catch (err: any) {
-    // Race: a concurrent request inserted the same email+session first, or the same transactionId.
     if (err?.code === 11000) {
-      if (err.keyPattern?.transactionId) {
-        throw new DuplicateTransactionError(
-          `Transaction ID ${transactionId} has already been used for another ticket.`
-        );
-      }
-      throw new DuplicateTicketError(
-        `A ticket for ${normalizedEmail} already exists for ${session}.`
-      );
+      // (Any index violations, though we removed unique transaction IDs)
     }
     throw err;
   }
