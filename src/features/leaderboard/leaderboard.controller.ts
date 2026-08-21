@@ -13,7 +13,9 @@ export class LeaderboardController {
     // GET /leaderboard/global
     getGlobalLeaderboard = async (req: Request, res: Response): Promise<void> => {
         try {
+            const page = parseInt(req.query.page as string) || 1;
             const limit = parseInt(req.query.limit as string) || 10;
+            const skip = (page - 1) * limit;
             
             const pipeline = [
                 {
@@ -23,34 +25,41 @@ export class LeaderboardController {
                     }
                 },
                 {
-                    $lookup: {
-                        from: "users",
-                        localField: "_id",
-                        foreignField: "_id",
-                        as: "user"
+                    $facet: {
+                        metadata: [ { $count: "total" } ],
+                        data: [
+                            { $sort: { cumulativeScore: -1 as const } },
+                            { $skip: skip },
+                            { $limit: limit },
+                            {
+                                $lookup: {
+                                    from: "users",
+                                    localField: "_id",
+                                    foreignField: "_id",
+                                    as: "user"
+                                }
+                            },
+                            { $unwind: "$user" },
+                            {
+                                $project: {
+                                    _id: 0,
+                                    id: "$_id",
+                                    playerName: "$user.username",
+                                    score: "$cumulativeScore"
+                                }
+                            }
+                        ]
                     }
-                },
-                {
-                    $unwind: "$user"
-                },
-                {
-                    $project: {
-                        _id: 0,
-                        userId: "$_id",
-                        username: "$user.username",
-                        cumulativeScore: 1
-                    }
-                },
-                {
-                    $sort: { cumulativeScore: -1 as const }
-                },
-                {
-                    $limit: limit
                 }
             ];
 
-            const leaderboard = await this.gameStatsModel.aggregate(pipeline);
-            res.status(200).json({ data: leaderboard });
+            const result = await this.gameStatsModel.aggregate(pipeline);
+            
+            const totalRecords = result[0]?.metadata[0]?.total || 0;
+            const totalPages = Math.ceil(totalRecords / limit) || 1;
+            const leaderboard = result[0]?.data || [];
+
+            res.status(200).json({ data: leaderboard, totalPages });
         } catch (error) {
             console.error(error);
             res.status(500).json({ error: "Internal Server Error" });
