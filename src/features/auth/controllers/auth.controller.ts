@@ -67,11 +67,11 @@ export function logoutHandler(
 ): void {
   const authReq = req as AuthenticatedRequest; 
 
-  authReq.logout((err) => {
+  authReq.logout((err: unknown) => {
     if (err) {
        console.error('Logout error:', err);
     }
-    authReq.session.destroy(() => {
+    authReq.session?.destroy(() => {
       res.clearCookie(AUTH_COOKIE_NAME);
       res.clearCookie(SESSION_COOKIE_NAME);
       

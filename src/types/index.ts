@@ -1,7 +1,24 @@
 import type { Request } from 'express';
-import 'express-session';
+import type { Session, SessionData } from 'express-session';
 
 import type { IAdmin } from '../features/auth/admin.model.js';
+
+// Augment Express so Passport's session methods are visible on every Request.
+// express-session and passport add these at runtime; we mirror that here.
+declare module 'express-serve-static-core' {
+  interface Request {
+    session: Session & Partial<SessionData>;
+    isAuthenticated(): boolean;
+    isUnauthenticated(): boolean;
+    logIn(user: unknown, done: (err: unknown) => void): void;
+    logIn(user: unknown, options: unknown, done: (err: unknown) => void): void;
+    login(user: unknown, done: (err: unknown) => void): void;
+    login(user: unknown, options: unknown, done: (err: unknown) => void): void;
+    logout(done: (err: unknown) => void): void;
+    logout(options: unknown, done: (err: unknown) => void): void;
+    user?: IAdmin;
+  }
+}
 
 export enum AdminRole {
   SuperAdmin = 'super_admin',
@@ -19,7 +36,6 @@ export interface JwtPayload {
 
 export interface AuthenticatedRequest extends Request {
   admin?: JwtPayload;
-  user?: IAdmin;
 }
 
 // Standardised API response shapes
