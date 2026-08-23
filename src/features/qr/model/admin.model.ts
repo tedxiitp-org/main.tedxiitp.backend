@@ -12,4 +12,4 @@ const adminSchema = new Schema<IAdmin>({
   role: { type: String, enum: ["ADMIN", "VOLUNTEER"], default: "VOLUNTEER" }
 }, { timestamps: true });
 
-export const Admin = mongoose.model<IAdmin>('Admin', adminSchema);
+export const Admin = mongoose.model<IAdmin>('QRAdmin', adminSchema);
