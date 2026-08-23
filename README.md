@@ -111,3 +111,190 @@ Destroys the current admin session and clears the cookie.
 Retrieves details of the currently logged-in admin.
 - **URL**: `/api/admin/auth/me`
 - **Method**: `GET`
+
+---
+
+## 🛍️ Products API
+
+### Get All Products
+Retrieves a list of all products in the database.
+- **URL**: `/products`
+- **Method**: `GET`
+- **Response**: Array of product objects.
+
+### Get Product by Slug/ID
+Retrieves a single product using its slug.
+- **URL**: `/products/:id`
+- **Method**: `GET`
+- **Response**: Single product object.
+
+### Create Product (Admin)
+Creates a new product (Merchandise or Ticket).
+- **URL**: `/admin/products`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "name": "TedX Official Mug",
+    "slug": "tedx-official-mug",
+    "description": "Elegant ceramic mug.",
+    "type": "MERCH",
+    "price": 350,
+    "currency": "INR",
+    "stock": 50,
+    "isUnlimitedStock": false,
+    "images": ["https://example.com/mug.png"],
+    "sizes": ["Regular"]
+  }
+  ```
+
+### Update Product (Admin)
+Updates product details by slug.
+- **URL**: `/admin/products/:id`
+- **Method**: `PATCH`
+- **Body**: JSON patch payload containing fields to update.
+
+### Delete Product (Admin)
+Deletes a product by slug.
+- **URL**: `/admin/products/:id`
+- **Method**: `DELETE`
+
+---
+
+## 🛒 Cart API
+
+### Get Cart
+Retrieves the user's active shopping cart, auto-calculating subtotals and totals based on current product prices.
+- **URL**: `/cart/:userId` (or via query/body `userId`)
+- **Method**: `GET`
+- **Response**: The cart object showing items, quantities, and totals.
+
+### Add Item to Cart
+Adds a product to the user's shopping cart. Checks stock availability before adding.
+- **URL**: `/cart/add`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "userId": "user_id_string",
+    "productId": "product_slug_string",
+    "quantity": 1,
+    "productType": "MERCH",
+    "selectedSize": "M"
+  }
+  ```
+
+### Update Item Quantity
+Updates the quantity of a specific product already in the cart.
+- **URL**: `/cart/update`
+- **Method**: `PATCH`
+- **Body**:
+  ```json
+  {
+    "userId": "user_id_string",
+    "productId": "product_slug_string",
+    "quantity": 3
+  }
+  ```
+
+### Remove Item from Cart
+Removes a specific product from the cart.
+- **URL**: `/cart/remove/:productId`
+- **Method**: `DELETE`
+- **Body**:
+  ```json
+  {
+    "userId": "user_id_string"
+  }
+  ```
+
+### Clear Cart
+Completely empties and deletes the user's cart.
+- **URL**: `/cart/clear`
+- **Method**: `DELETE`
+- **Body**:
+  ```json
+  {
+    "userId": "user_id_string"
+  }
+  ```
+
+---
+
+## 📧 Mail & Queue API
+
+The mailing system uses **BullMQ** + **Redis** to queue and process email sending asynchronously. It logs queue statuses in MongoDB and supports dynamic templates with custom HTML placeholders like `{{name}}`.
+
+### Send Email (Enqueue Job)
+Queues a new email job.
+- **URL**: `/email`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "recipientEmail": "recipient@example.com",
+    "recipientName": "Jane Doe",
+    "templateName": "welcome_template",
+    "subject": "Welcome to TEDxIITPatna!",
+    "variables": {
+      "name": "Jane"
+    },
+    "attachments": [
+      {
+        "filename": "ticket.pdf",
+        "url": "https://example.com/ticket.pdf",
+        "mimeType": "application/pdf"
+      }
+    ],
+    "metadata": {
+      "userId": "12345"
+    }
+  }
+  ```
+
+### Upload Email Template
+Registers a new reusable HTML email template.
+- **URL**: `/email/template`
+- **Method**: `POST`
+- **Body**:
+  ```json
+  {
+    "name": "welcome_template",
+    "subject": "Welcome to the Event!",
+    "htmlBody": "<h1>Hello {{name}},</h1><p>Thanks for registering!</p>",
+    "isActive": true
+  }
+  ```
+
+### Update Email Template
+Updates an existing template by its name.
+- **URL**: `/email/template/:id` (where `:id` is template name)
+- **Method**: `POST`
+- **Body**: JSON template updates.
+
+### Delete Email Template
+Deletes a template by name.
+- **URL**: `/email/template`
+- **Method**: `DELETE`
+- **Body**:
+  ```json
+  {
+    "name": "welcome_template"
+  }
+  ```
+
+### BullMQ Dashboard (Bull Board)
+Provides an interactive web dashboard for monitoring enqueued, processing, completed, and failed email jobs.
+- **URL**: `/admin/queues`
+- **Method**: `GET`
+- **Response**: Interactive UI dashboard.
+
+---
+
+## 🏃 Running the Mail Queue Worker
+
+To process the enqueued emails in the background (make sure Redis is running and SMTP credentials are set in your `.env`):
+```bash
+npm run worker
+```
+
