@@ -10,6 +10,9 @@ import qrRoutes from './features/qr/routes/qr.routes.js';
 import { loginAdmin, logoutAdmin } from './features/qr/controller/auth.controller.js';
 import { BulkJob } from './features/qr/model/bulkjob.model.js';
 import { seedDatabase } from './seed.js';
+import { usersRoutes } from './features/users/users.routes.js';
+import { gamesRoutes } from './features/games/games.routes.js';
+import { leaderboardRoutes } from './features/leaderboard/leaderboard.routes.js';
 
 // Load env
 dotenv.config();
@@ -84,6 +87,11 @@ app.post('/api/qr/auth/logout', logoutAdmin);
 
 // QR Routes 
 app.use('/api/qr', qrRoutes);
+
+// Additional API routes
+app.use('/api/v1/users', usersRoutes);
+app.use('/api/v1/games', gamesRoutes);
+app.use('/api/v1/leaderboard', leaderboardRoutes);
 
 
 app.get('/health', (req: Request, res: Response) => {
