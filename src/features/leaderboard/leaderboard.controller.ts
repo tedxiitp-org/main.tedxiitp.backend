@@ -43,9 +43,9 @@ export class LeaderboardController {
                             {
                                 $project: {
                                     _id: 0,
-                                    id: "$_id",
-                                    playerName: "$user.username",
-                                    score: "$cumulativeScore"
+                                    userId: "$_id",
+                                    username: "$user.username",
+                                    cumulativeScore: "$cumulativeScore"
                                 }
                             }
                         ]
@@ -97,7 +97,7 @@ export class LeaderboardController {
                             _id: 0,
                             userId: 1,
                             username: "$user.username",
-                            finalScore: 1,
+                            cumulativeScore: "$finalScore",
                             rawScore: 1,
                             timeTaken: 1
                         }

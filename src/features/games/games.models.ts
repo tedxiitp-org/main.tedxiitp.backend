@@ -5,6 +5,7 @@ const GameSchema = new Schema<IGame>({
     name: { type: String, required: true },
     type: { type: String, enum: ['A', 'B'], required: true },
     description: { type: String },
+    maxRawScore: { type: Number },
     createdAt: { type: Date, default: Date.now }
 });
 
