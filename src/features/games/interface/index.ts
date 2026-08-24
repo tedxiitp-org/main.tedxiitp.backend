@@ -4,6 +4,7 @@ export interface IGame {
     name: string;
     type: 'A' | 'B';
     description?: string;
+    maxRawScore?: number;
     createdAt: Date;
 }
 
