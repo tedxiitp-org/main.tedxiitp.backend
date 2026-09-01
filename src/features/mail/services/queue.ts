@@ -9,12 +9,38 @@ export const connection = {
     password: process.env.REDIS_PASSWORD || undefined,
 };
 
-export const myQueue = new Queue('mail_queue', { connection });
+// Lazy-initialized queue — only connects to Redis when actually used.
+// This prevents the app from crashing on import when Redis is unavailable
+// (e.g. on Vercel serverless where Redis isn't needed yet).
+let _queue: Queue | null = null;
+
+export function getQueue(): Queue {
+    if (!_queue) {
+        _queue = new Queue('mail_queue', { connection });
+    }
+    return _queue;
+}
+
+// Keep backward-compatible export (used by mail.controller.ts)
+// This creates a proxy that lazily initializes on first method call.
+export const myQueue = new Proxy({} as Queue, {
+    get(_target, prop, receiver) {
+        const queue = getQueue();
+        const value = (queue as any)[prop];
+        return typeof value === 'function' ? value.bind(queue) : value;
+    }
+});
 
 export const serverAdapter = new ExpressAdapter();
 serverAdapter.setBasePath('/admin/queues');
 
-createBullBoard({
-  queues: [ new BullMQAdapter(myQueue) ],
-  serverAdapter: serverAdapter,
-});
+// Wrap Bull Board setup — if Redis isn't available, the dashboard
+// will just show an empty state instead of crashing the app.
+try {
+    createBullBoard({
+      queues: [ new BullMQAdapter(getQueue()) ],
+      serverAdapter: serverAdapter,
+    });
+} catch (err) {
+    console.warn('Bull Board setup skipped (Redis may be unavailable):', (err as Error).message);
+}

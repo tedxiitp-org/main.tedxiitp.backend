@@ -16,12 +16,9 @@
   "dependencies": {
     "@bull-board/api": "^8.0.0",
     "@bull-board/express": "^8.0.0",
-    "bcrypt": "^6.0.0",
-<<<<<<< HEAD
+    "bcryptjs": "^3.0.2",
     "bullmq": "^5.78.0",
-=======
     "connect-mongo": "^6.0.0",
->>>>>>> 9d348d3807c4f0ebf051e3a476dafaaa58609e27
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.6",
     "dotenv": "^17.4.2",
@@ -39,7 +36,7 @@
     "zod": "^4.4.3"
   },
   "devDependencies": {
-    "@types/bcrypt": "^6.0.0",
+    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",

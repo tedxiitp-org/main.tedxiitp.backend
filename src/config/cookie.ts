@@ -7,7 +7,7 @@ export const SESSION_COOKIE_NAME = 'sid';
 export const cookieOptions: CookieOptions = {
   httpOnly: true,
   secure: env.NODE_ENV === 'production',
-  sameSite: 'strict',
+  sameSite: env.NODE_ENV === 'production' ? 'none' : 'strict',
   path: '/',
   maxAge: 1000 * 60 * 60 * 24 * 7, // 7 days in ms
 };

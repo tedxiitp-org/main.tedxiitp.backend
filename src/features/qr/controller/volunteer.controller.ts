@@ -1,5 +1,5 @@
 import { Request, Response } from 'express';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { Admin } from '../model/admin.model.js';
 
 // Create a volunteer account with the email + password chosen by the admin.
