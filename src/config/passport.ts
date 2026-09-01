@@ -43,7 +43,7 @@ passport.serializeUser((user: Express.User, done) => {
 });
 
 // server uses that id to fetch the admin data directly from the database on every new request
-passport.deserializeUser(async (id: string, done) => {
+passport.deserializeUser(async (id: string, done: (err: unknown, user?: Express.User | false | null) => void) => {
   try {
     const admin = await findAdminById(id);
     done(null, admin ?? false);
