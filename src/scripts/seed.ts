@@ -1,5 +1,5 @@
 import mongoose from 'mongoose';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { env } from '../config/env.js';
 import { Admin } from '../features/auth/admin.model.js';import { AdminRole } from '../types/index.js';
 

@@ -14,6 +14,11 @@ import { gamesRoutes } from "./features/games/games.routes.js";
 import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
 import qrRoutes from "./features/qr/routes/qr.routes.js";
 import { seedDatabase } from "./features/qr/seed.js";
+import productRouter from "./features/products/product.routes.js";
+import adminRouter from "./features/products/admin.routes.js";
+import cartRouter from "./features/cart/cart.routes.js";
+import mailRouter from "./features/mail/mail.routes.js";
+import { serverAdapter } from "./features/mail/services/queue.js";
 
 const app = express();
 
@@ -70,6 +75,11 @@ app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/games", gamesRoutes);
 app.use("/api/v1/leaderboard", leaderboardRoutes);
 app.use("/api/qr", qrRoutes);
+app.use("/products", productRouter);
+app.use("/admin/products", adminRouter);
+app.use("/cart", cartRouter);
+app.use("/email", mailRouter);
+app.use("/admin/queues", serverAdapter.getRouter());
 
 export async function startServer() {
     try {

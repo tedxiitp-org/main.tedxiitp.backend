@@ -1,6 +1,6 @@
 import passport from 'passport';
 import { Strategy as LocalStrategy } from 'passport-local';
-import bcrypt from 'bcrypt';
+import bcrypt from 'bcryptjs';
 import { findAdminByEmail, findAdminById } from '../features/auth/admin.model.js';
 import type { IAdmin } from '../features/auth/admin.model.js';
 
