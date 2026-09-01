@@ -1,6 +1,6 @@
 # Backend Folder Structure
 
-This project follows a modular, feature-based architecture for scalability and clarity.
+This project follows a modular, feature-based architecture for scalability and clarity
 
 ## Directory Overview
 

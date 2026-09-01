@@ -55,11 +55,20 @@ export class GamesController {
                 return;
             }
 
-            const game = await this.gameModel.findById(gameId);
+            let game: any = null;
+            try {
+                game = await this.gameModel.findById(gameId);
+            } catch (err) {
+                // Ignore CastError
+            }
+            if (!game) {
+                game = await this.gameModel.findOne({ name: gameId });
+            }
             if (!game) {
                 res.status(404).json({ error: "Game not found" });
                 return;
             }
+            const resolvedGameId = game._id;
 
             const user = await this.userModel.findById(userId);
             if (!user) {
@@ -74,14 +83,16 @@ export class GamesController {
                     res.status(400).json({ error: "rawScore is required for Game Type A" });
                     return;
                 }
-                finalScore = Number(rawScore);
+                const rawNum = Number(rawScore);
+                const maxRawScore = game.maxRawScore || 1000;
+                finalScore = Math.round((rawNum / maxRawScore) * 1000);
                 
                 // Track highest score for Type A
-                const existingStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: gameId as string });
+                const existingStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: resolvedGameId as string });
                 if (existingStats) {
                     if (finalScore > existingStats.finalScore) {
                         await this.gameStatsModel.updateOne({ _id: (existingStats as any)._id }, { finalScore, rawScore });
-                        const updatedStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: gameId as string });
+                        const updatedStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: resolvedGameId as string });
                         res.status(200).json({ message: "New high score achieved!", data: updatedStats });
                         return;
                     } else {
@@ -94,16 +105,18 @@ export class GamesController {
                     res.status(400).json({ error: "timeTaken is required for Game Type B" });
                     return;
                 }
-                // Time-to-Score conversion logic: max 10000 points, -10 points per second
+                // Time-to-Score conversion logic: normalized to 1000 points.
+                // maxRawScore represents maximum expected time (e.g., 100s)
                 const timeNum = Number(timeTaken);
-                finalScore = Math.max(0, 10000 - (timeNum * 10));
+                const maxExpectedTime = game.maxRawScore || 100;
+                finalScore = Math.max(0, Math.round((1 - (timeNum / maxExpectedTime)) * 1000));
 
                 // Track fastest time (highest score) for Type B
-                const existingStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: gameId as string });
+                const existingStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: resolvedGameId as string });
                 if (existingStats) {
                     if (finalScore > existingStats.finalScore) {
                         await this.gameStatsModel.updateOne({ _id: (existingStats as any)._id }, { finalScore, timeTaken });
-                        const updatedStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: gameId as string });
+                        const updatedStats = await this.gameStatsModel.findOne({ userId: userId as string, gameId: resolvedGameId as string });
                         res.status(200).json({ message: "New best time achieved!", data: updatedStats });
                         return;
                     } else {
@@ -115,7 +128,7 @@ export class GamesController {
 
             const newStats = await this.gameStatsModel.create({
                 userId: userId as string,
-                gameId: gameId as string,
+                gameId: resolvedGameId as string,
                 rawScore,
                 timeTaken,
                 finalScore
@@ -132,7 +145,22 @@ export class GamesController {
     getUserStats = async (req: Request, res: Response): Promise<void> => {
         try {
             const { gameId, userId } = req.params;
-            const stats = await this.gameStatsModel.findOne({ gameId: gameId as string, userId: userId as string });
+            let game: any = null;
+            try {
+                game = await this.gameModel.findById(gameId);
+            } catch (err) {
+                // Ignore CastError
+            }
+            if (!game) {
+                game = await this.gameModel.findOne({ name: gameId });
+            }
+            if (!game) {
+                res.status(404).json({ error: "Game not found" });
+                return;
+            }
+            const resolvedGameId = game._id;
+            
+            const stats = await this.gameStatsModel.findOne({ gameId: resolvedGameId as string, userId: userId as string });
 
             
             if (!stats) {
