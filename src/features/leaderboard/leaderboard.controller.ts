@@ -1,12 +1,14 @@
 import type { Request, Response } from "express";
 import type { Model } from "mongoose";
-import { getGameStatsModel } from "../games/games.models.js";
-import type { IGameStats } from "../games/interface/index.js";
+import { getGameModel, getGameStatsModel } from "../games/games.models.js";
+import type { IGame, IGameStats } from "../games/interface/index.js";
 
 export class LeaderboardController {
+    private gameModel: Model<IGame>;
     private gameStatsModel: Model<IGameStats>;
     
     constructor(){
+        this.gameModel = getGameModel();
         this.gameStatsModel = getGameStatsModel();
     }
 
@@ -71,52 +73,56 @@ export class LeaderboardController {
         try {
             const { gameId } = req.params;
             const limit = parseInt(req.query.limit as string) || 10;
-            
-            // Note: because we need to convert string gameId to ObjectId for aggregation if using pure native mongo,
-            // mongoose handles this automatically in find() but in aggregate it might need mongoose.Types.ObjectId.
-            import("mongoose").then(mongoose => {
-                const gameObjectId = new mongoose.Types.ObjectId(gameId as string);
-                
-                const pipeline = [
+            let game: any = null;
+            try {
+                game = await this.gameModel.findById(gameId);
+            } catch {
+                // The endpoint also accepts a human-readable game name.
+            }
+            if (!game) game = await this.gameModel.findOne({ name: gameId });
+            if (!game && (gameId === "snake" || gameId === "snakes")) {
+                game = await this.gameModel.findOneAndUpdate(
+                    { name: "snake" },
                     {
-                        $match: { gameId: gameObjectId }
+                        name: "snake",
+                        type: "A",
+                        description: "TEDx Snake",
+                        maxRawScore: 1000,
                     },
-                    {
-                        $lookup: {
-                            from: "users",
-                            localField: "userId",
-                            foreignField: "_id",
-                            as: "user"
-                        }
-                    },
-                    {
-                        $unwind: "$user"
-                    },
-                    {
-                        $project: {
-                            _id: 0,
-                            userId: 1,
-                            username: "$user.username",
-                            cumulativeScore: "$finalScore",
-                            rawScore: 1,
-                            timeTaken: 1
-                        }
-                    },
-                    {
-                        $sort: { finalScore: -1 as const }
-                    },
-                    {
-                        $limit: limit
-                    }
-                ];
+                    { upsert: true, new: true, setDefaultsOnInsert: true }
+                );
+            }
+            if (!game) {
+                res.status(404).json({ error: "Game not found" });
+                return;
+            }
 
-                return this.gameStatsModel.aggregate(pipeline);
-            }).then(leaderboard => {
-                res.status(200).json({ data: leaderboard });
-            }).catch(error => {
-                console.error(error);
-                res.status(500).json({ error: "Internal Server Error" });
-            });
+            const leaderboard = await this.gameStatsModel.aggregate([
+                { $match: { gameId: game._id } },
+                {
+                    $lookup: {
+                        from: "users",
+                        localField: "userId",
+                        foreignField: "_id",
+                        as: "user"
+                    }
+                },
+                { $unwind: "$user" },
+                {
+                    $project: {
+                        _id: 0,
+                        userId: 1,
+                        username: "$user.username",
+                        cumulativeScore: "$finalScore",
+                        rawScore: 1,
+                        timeTaken: 1
+                    }
+                },
+                { $sort: { cumulativeScore: -1 } },
+                { $limit: limit }
+            ]);
+
+            res.status(200).json({ data: leaderboard });
             
         } catch (error) {
             console.error(error);
