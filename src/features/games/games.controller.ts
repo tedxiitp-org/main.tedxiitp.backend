@@ -64,6 +64,18 @@ export class GamesController {
             if (!game) {
                 game = await this.gameModel.findOne({ name: gameId });
             }
+            if (!game && (gameId === "snake" || gameId === "snakes" || gameId === "brick-breaker")) {
+                game = await this.gameModel.findOneAndUpdate(
+                    { name: gameId === "brick-breaker" ? "brick-breaker" : "snake" },
+                    {
+                        name: gameId === "brick-breaker" ? "brick-breaker" : "snake",
+                        type: "A",
+                        description: gameId === "brick-breaker" ? "TEDx Brick Breaker" : "TEDx Snake",
+                        maxRawScore: 1000,
+                    },
+                    { upsert: true, new: true, setDefaultsOnInsert: true }
+                );
+            }
             if (!game) {
                 res.status(404).json({ error: "Game not found" });
                 return;

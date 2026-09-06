@@ -22,7 +22,11 @@ export class UsersController {
             let user = await this.userModel.findOne({ username });
             
             if (user) {
-                res.status(409).json({ error: "Username is already taken" });
+                res.status(200).json({
+                    message: "Identity retrieved successfully",
+                    userId: user._id,
+                    username: user.username
+                });
                 return;
             }
             
