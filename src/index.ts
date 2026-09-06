@@ -47,11 +47,24 @@ app.get("/health", (req, res) => {
     res.status(200).json({ status: "ok", message: "Server is healthy" });
 });
 
-// Middleware to ensure DB is connected on serverless requests (must be registered BEFORE routes)
+// Middleware to ensure DB is connected (and seeded) on serverless requests (must be registered BEFORE routes)
+let hasSeeded = false;
 app.use(async (req, res, next) => {
     try {
         if (env.MONGO_URI) {
             await mongoManager.connect(env.MONGO_URI);
+        }
+        // startServer() (which normally does this) never runs on Vercel, since
+        // the serverless handler uses the exported `app` directly. Seed once
+        // per warm instance here instead, so the QR admin account actually
+        // gets created in production.
+        if (!hasSeeded && env.NODE_ENV !== 'test' && process.env.SEED_ON_BOOT !== 'false') {
+            hasSeeded = true;
+            try {
+                await seedDatabase();
+            } catch (err) {
+                console.error('Seed-on-boot failed (continuing without it):', err);
+            }
         }
         next();
     } catch (err) {
