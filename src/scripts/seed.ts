@@ -5,11 +5,16 @@ import { Admin } from '../features/auth/admin.model.js';import { AdminRole } fro
 
 async function seedAdmin() {
   try {
+    // Required only here, not by the API — validate at the point of use.
+    const email = env.SUPERADMIN_EMAIL;
+    const password = env.SUPERADMIN_PASSWORD;
+    if (!email || !password) {
+      throw new Error('Missing SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD');
+    }
+
     await mongoose.connect(env.MONGO_URI);
     console.log('DB connected.');
 
-    const email = env.SUPERADMIN_EMAIL;
-    
     // prevent duplicating the user
     const existingAdmin = await Admin.findOne({ email });
     if (existingAdmin) {
@@ -17,8 +22,8 @@ async function seedAdmin() {
       process.exit(0);
     }
 
-    // hash the password 
-    const hashedPassword = await bcrypt.hash(env.SUPERADMIN_PASSWORD, 12);
+    // hash the password
+    const hashedPassword = await bcrypt.hash(password, 12);
 
     await Admin.create({
       name: 'Admin',

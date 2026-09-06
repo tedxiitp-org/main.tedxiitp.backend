@@ -18,9 +18,11 @@ const envSchema = z.object({
   JWT_SECRET: z.string().min(16, { message: 'JWT_SECRET must be at least 16 characters' }),
   SESSION_SECRET: z.string().min(16, { message: 'SESSION_SECRET must be at least 16 characters' }),
   
-  // Admin Credentials
-  SUPERADMIN_EMAIL: z.string().email({ message: 'SUPERADMIN_EMAIL must be a valid email' }),
-  SUPERADMIN_PASSWORD: z.string().min(8, { message: 'SUPERADMIN_PASSWORD must be at least 8 characters' }),
+  // Admin Credentials — only read by the manual seed script (src/scripts/seed.ts),
+  // never by the running API, so they must stay optional here. Requiring them
+  // took the whole serverless function down on boot when they weren't set.
+  SUPERADMIN_EMAIL: z.string().email({ message: 'SUPERADMIN_EMAIL must be a valid email' }).optional(),
+  SUPERADMIN_PASSWORD: z.string().min(8, { message: 'SUPERADMIN_PASSWORD must be at least 8 characters' }).optional(),
 });
 
 const parsedEnv = envSchema.safeParse(process.env);
