@@ -39,10 +39,16 @@ export const seedDatabase = async () => {
     );
   }
 
-  const adminEmail = process.env.SEED_ADMIN_EMAIL;
-  const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+  // SUPERADMIN_* is the source of truth for the admin account; SEED_ADMIN_* is
+  // still honoured as a fallback for older config. Before this, the seeder read
+  // only SEED_ADMIN_*, so a deployment configured with SUPERADMIN_* left the
+  // admin silently unseeded and every login returned "Invalid credentials".
+  const adminEmail = process.env.SUPERADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL;
+  const adminPassword = process.env.SUPERADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD;
   if (!adminEmail || !adminPassword) {
-    throw new Error('Missing SEED_ADMIN_EMAIL or SEED_ADMIN_PASSWORD');
+    throw new Error(
+      'Missing admin credentials: set SUPERADMIN_EMAIL + SUPERADMIN_PASSWORD (or SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD)'
+    );
   }
   await upsertUser(adminEmail, adminPassword, 'ADMIN');
 
