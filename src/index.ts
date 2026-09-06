@@ -13,6 +13,7 @@ import { usersRoutes } from "./features/users/users.routes.js";
 import { gamesRoutes } from "./features/games/games.routes.js";
 import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
 import qrRoutes from "./features/qr/routes/qr.routes.js";
+import { loginAdmin, logoutAdmin } from "./features/qr/controller/auth.controller.js";
 import { seedDatabase } from "./features/qr/seed.js";
 
 const app = express();
@@ -69,6 +70,8 @@ app.use("/api/admin/auth", authRoutes);
 app.use("/api/v1/users", usersRoutes);
 app.use("/api/v1/games", gamesRoutes);
 app.use("/api/v1/leaderboard", leaderboardRoutes);
+app.post("/api/qr/auth/login", loginAdmin);
+app.post("/api/qr/auth/logout", logoutAdmin);
 app.use("/api/qr", qrRoutes);
 
 export async function startServer() {
