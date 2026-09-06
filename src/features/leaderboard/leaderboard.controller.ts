@@ -80,13 +80,13 @@ export class LeaderboardController {
                 // The endpoint also accepts a human-readable game name.
             }
             if (!game) game = await this.gameModel.findOne({ name: gameId });
-            if (!game && (gameId === "snake" || gameId === "snakes")) {
+            if (!game && (gameId === "snake" || gameId === "snakes" || gameId === "brick-breaker")) {
                 game = await this.gameModel.findOneAndUpdate(
-                    { name: "snake" },
+                    { name: gameId === "brick-breaker" ? "brick-breaker" : "snake" },
                     {
-                        name: "snake",
+                        name: gameId === "brick-breaker" ? "brick-breaker" : "snake",
                         type: "A",
-                        description: "TEDx Snake",
+                        description: gameId === "brick-breaker" ? "TEDx Brick Breaker" : "TEDx Snake",
                         maxRawScore: 1000,
                     },
                     { upsert: true, new: true, setDefaultsOnInsert: true }
