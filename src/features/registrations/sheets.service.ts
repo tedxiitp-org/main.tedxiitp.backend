@@ -8,12 +8,65 @@ const SCOPE = 'https://www.googleapis.com/auth/spreadsheets.readonly';
 
 export type SheetsMode = 'SERVICE_ACCOUNT' | 'PUBLIC_LINK' | 'NOT_CONFIGURED';
 
+export interface ServiceAccount {
+  clientEmail: string;
+  privateKey: string;
+}
+
+const normalizePrivateKey = (raw: string): string => raw.replace(/\\n/g, '\n').trim();
+
+const decodeCredentialBlob = (raw: string): string => {
+  const text = raw.trim().replace(/^['"]|['"]$/g, '');
+  if (text.startsWith('{')) return text;
+  try {
+    return Buffer.from(text, 'base64').toString('utf8');
+  } catch {
+    return text;
+  }
+};
+
+const parseServiceAccountJson = (raw: string): ServiceAccount => {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(decodeCredentialBlob(raw));
+  } catch {
+    throw new Error(
+      'GOOGLE_SERVICE_ACCOUNT_JSON is not valid JSON. Paste the whole downloaded key file, or base64 encode it.'
+    );
+  }
+
+  const record = (typeof parsed === 'object' && parsed !== null ? parsed : {}) as Record<
+    string,
+    unknown
+  >;
+  const clientEmail = typeof record.client_email === 'string' ? record.client_email : null;
+  const privateKey = typeof record.private_key === 'string' ? record.private_key : null;
+
+  if (!clientEmail || !privateKey) {
+    throw new Error(
+      'GOOGLE_SERVICE_ACCOUNT_JSON is missing client_email or private_key. Use the service account key file, not an OAuth client file.'
+    );
+  }
+
+  return { clientEmail, privateKey: normalizePrivateKey(privateKey) };
+};
+
+export const getServiceAccount = (): ServiceAccount | null => {
+  if (env.GOOGLE_SERVICE_ACCOUNT_JSON) {
+    return parseServiceAccountJson(env.GOOGLE_SERVICE_ACCOUNT_JSON);
+  }
+  if (env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_SERVICE_ACCOUNT_KEY) {
+    return {
+      clientEmail: env.GOOGLE_SERVICE_ACCOUNT_EMAIL,
+      privateKey: normalizePrivateKey(env.GOOGLE_SERVICE_ACCOUNT_KEY),
+    };
+  }
+  return null;
+};
+
 export const sheetsMode = (): SheetsMode => {
   if (!env.GOOGLE_SHEETS_ID) return 'NOT_CONFIGURED';
-  if (env.GOOGLE_SERVICE_ACCOUNT_EMAIL && env.GOOGLE_SERVICE_ACCOUNT_KEY) {
-    return 'SERVICE_ACCOUNT';
-  }
-  return 'PUBLIC_LINK';
+  return getServiceAccount() ? 'SERVICE_ACCOUNT' : 'PUBLIC_LINK';
 };
 
 interface CachedToken {
@@ -25,19 +78,17 @@ let cachedToken: CachedToken | null = null;
 
 export const isSheetsConfigured = (): boolean => sheetsMode() !== 'NOT_CONFIGURED';
 
-const normalizePrivateKey = (raw: string): string => raw.replace(/\\n/g, '\n').trim();
-
 const requestAccessToken = async (): Promise<string> => {
   const now = Date.now();
   if (cachedToken && cachedToken.expiresAt > now + 60_000) {
     return cachedToken.value;
   }
 
-  const clientEmail = env.GOOGLE_SERVICE_ACCOUNT_EMAIL;
-  const privateKey = env.GOOGLE_SERVICE_ACCOUNT_KEY;
-  if (!clientEmail || !privateKey) {
+  const account = getServiceAccount();
+  if (!account) {
     throw new Error('Google service account credentials are not configured');
   }
+  const { clientEmail, privateKey } = account;
 
   const issuedAt = Math.floor(now / 1000);
   const assertion = jwt.sign(
@@ -48,7 +99,7 @@ const requestAccessToken = async (): Promise<string> => {
       iat: issuedAt,
       exp: issuedAt + 3600,
     },
-    normalizePrivateKey(privateKey),
+    privateKey,
     { algorithm: 'RS256' }
   );
 
@@ -111,7 +162,7 @@ const fetchServiceAccountRows = async (): Promise<string[][]> => {
     const detail = await response.text();
     const hint =
       response.status === 403 || response.status === 404
-        ? ` Share the sheet with ${env.GOOGLE_SERVICE_ACCOUNT_EMAIL ?? 'the service account'} as a Viewer, or clear the service account settings to read it as a public sheet.`
+        ? ` Share the sheet with ${getServiceAccount()?.clientEmail ?? 'the service account'} as a Viewer, or clear the service account settings to read it as a public sheet.`
         : '';
     throw new Error(
       `Google Sheets request failed (${response.status}).${hint} ${detail.slice(0, 160)}`

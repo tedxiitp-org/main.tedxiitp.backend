@@ -32,6 +32,7 @@ const envSchema = z.object({
   GOOGLE_SHEETS_ID: z.string().optional(),
   GOOGLE_SHEETS_RANGE: z.string().default('Form Responses 1'),
   GOOGLE_SHEETS_GID: z.string().default('0'),
+  GOOGLE_SERVICE_ACCOUNT_JSON: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_EMAIL: z.string().optional(),
   GOOGLE_SERVICE_ACCOUNT_KEY: z.string().optional(),
 });
