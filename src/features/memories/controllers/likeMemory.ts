@@ -11,7 +11,7 @@ export const likeMemory = async (req: Request, res: Response): Promise<void> => 
         const updatedMemory = await Memory.findByIdAndUpdate(
             id,
             { $inc: { likes: 1 } },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!updatedMemory) {

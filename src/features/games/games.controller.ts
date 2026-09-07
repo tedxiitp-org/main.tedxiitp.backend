@@ -73,7 +73,7 @@ export class GamesController {
                         description: gameId === "brick-breaker" ? "TEDx Brick Breaker" : "TEDx Snake",
                         maxRawScore: 1000,
                     },
-                    { upsert: true, new: true, setDefaultsOnInsert: true }
+                    { upsert: true, returnDocument: 'after', setDefaultsOnInsert: true }
                 );
             }
             if (!game) {

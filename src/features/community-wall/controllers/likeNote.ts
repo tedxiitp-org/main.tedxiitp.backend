@@ -11,7 +11,7 @@ export const likeNote = async (req: Request, res: Response): Promise<void> => {
         const updatedNote = await CommunityWallNote.findByIdAndUpdate(
             id,
             { $inc: { likes: 1 } },
-            { new: true }
+            { returnDocument: 'after' }
         );
 
         if (!updatedNote) {

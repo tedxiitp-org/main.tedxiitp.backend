@@ -4,10 +4,12 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "tsx watch src/server.ts",
+    "dev": "tsx watch src/main.ts",
+    "start": "tsx src/main.ts",
     "build": "tsc --noEmit",
-    "start": "tsx src/server.ts"
+    "typecheck": "tsc --noEmit",
+    "seed": "tsx src/features/qr/seed.ts",
+    "migrate": "tsx src/scripts/migrate.ts"
   },
   "keywords": [],
   "author": "",
@@ -43,6 +45,7 @@
     "@types/passport": "^1.0.17",
     "@types/passport-local": "^1.0.38",
     "@types/qrcode": "^1.5.6",
+    "mongodb-memory-server": "^11.2.0",
     "typescript": "^6.0.3"
   }
 }

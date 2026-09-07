@@ -1,118 +1,154 @@
-import express from "express";
-import cors from "cors";
-import cookieParser from "cookie-parser";
-import { mongoManager } from "./db/mongo.js";
-import { env } from "./config/env.js";
-import { exampleRoutes } from "./features/example/example.routes.js";
-import { sessionMiddleware } from "./config/session.js";
-import passport from "./config/passport.js";
-import authRoutes from "./features/auth/auth.routes.js";
-import memoryRoutes from "./features/memories/memory.routes.js";
-import communityWallRoutes from "./features/community-wall/communityWall.routes.js";
-import { usersRoutes } from "./features/users/users.routes.js";
-import { gamesRoutes } from "./features/games/games.routes.js";
-import { leaderboardRoutes } from "./features/leaderboard/leaderboard.routes.js";
-import qrRoutes from "./features/qr/routes/qr.routes.js";
-import { loginAdmin, logoutAdmin } from "./features/qr/controller/auth.controller.js";
-import { seedDatabase } from "./features/qr/seed.js";
+import express from 'express';
+import type { Express, NextFunction, Request, Response } from 'express';
+import cors from 'cors';
+import cookieParser from 'cookie-parser';
+import rateLimit from 'express-rate-limit';
+import { mongoManager } from './db/mongo.js';
+import { env, envValidation } from './config/env.js';
+import { createSessionMiddleware } from './config/session.js';
+import passport from './config/passport.js';
+import { exampleRoutes } from './features/example/example.routes.js';
+import authRoutes from './features/auth/auth.routes.js';
+import memoryRoutes from './features/memories/memory.routes.js';
+import communityWallRoutes from './features/community-wall/communityWall.routes.js';
+import { usersRoutes } from './features/users/users.routes.js';
+import { gamesRoutes } from './features/games/games.routes.js';
+import { leaderboardRoutes } from './features/leaderboard/leaderboard.routes.js';
+import qrRoutes from './features/qr/routes/qr.routes.js';
+import registrationRoutes from './features/registrations/registration.routes.js';
+import jobRoutes from './features/jobs/job.routes.js';
+import { loginAdmin, logoutAdmin } from './features/qr/controller/auth.controller.js';
+import { seedDatabase } from './features/qr/seed.js';
 
-const app = express();
+const buildConfigErrorApp = (missing: string[]): Express => {
+  const app = express();
+  app.get('/health', (_req: Request, res: Response) => {
+    res.status(503).json({ status: 'misconfigured', missing });
+  });
+  app.use((_req: Request, res: Response) => {
+    res.status(503).json({
+      error: 'Server configuration incomplete',
+      missing,
+    });
+  });
+  return app;
+};
 
-// Middleware
-const allowedOrigins = [
-    "https://tedxiitpatna.iitp.ac.in",
-    "http://localhost:3000",
-    "http://localhost:3001"
-].filter(Boolean) as string[];
+const buildApp = (): Express => {
+  const app = express();
 
-app.use(cors({
-    origin: (origin, callback) => {
-        // Allow requests with no origin (like mobile apps, Postman, curl, or server-to-server)
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin) || env.NODE_ENV === "development") {
-            return callback(null, true);
+  const allowedOrigins = [env.CLIENT_URL, 'http://localhost:3000', 'http://localhost:3001'].filter(
+    (value): value is string => Boolean(value)
+  );
+
+  app.set('trust proxy', 1);
+
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        if (!origin) {
+          callback(null, true);
+          return;
         }
-        return callback(new Error("CORS policy violation: Access denied for this origin."));
-    },
-    credentials: true,
-}));
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
-app.use(sessionMiddleware);
-app.use(passport.initialize());
-app.use(passport.session());
+        if (allowedOrigins.includes(origin) || env.NODE_ENV === 'development') {
+          callback(null, true);
+          return;
+        }
+        callback(null, false);
+      },
+      credentials: true,
+    })
+  );
 
-app.get("/health", (req, res) => {
-    res.status(200).json({ status: "ok", message: "Server is healthy" });
-});
+  app.use(express.json({ limit: '2mb' }));
+  app.use(express.urlencoded({ extended: true }));
+  app.use(cookieParser());
+  app.use(createSessionMiddleware());
+  app.use(passport.initialize());
+  app.use(passport.session());
 
-// Middleware to ensure DB is connected (and seeded) on serverless requests (must be registered BEFORE routes)
-let hasSeeded = false;
-app.use(async (req, res, next) => {
+  app.get('/health', (_req: Request, res: Response) => {
+    res.status(200).json({ status: 'ok' });
+  });
+
+  app.use(
+    '/api/',
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      limit: 5000,
+      standardHeaders: 'draft-7',
+      legacyHeaders: false,
+      message: { error: 'Too many requests, please try again later.' },
+    })
+  );
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    limit: 30,
+    standardHeaders: 'draft-7',
+    legacyHeaders: false,
+    skipSuccessfulRequests: true,
+    message: { error: 'Too many login attempts, please try again later.' },
+  });
+
+  let seeded = false;
+  app.use(async (_req: Request, _res: Response, next: NextFunction) => {
     try {
-        if (env.MONGO_URI) {
-            await mongoManager.connect(env.MONGO_URI);
+      await mongoManager.connect(env.MONGO_URI);
+      if (!seeded && env.NODE_ENV !== 'test') {
+        seeded = true;
+        try {
+          await seedDatabase();
+        } catch (error) {
+          console.error('Seed-on-boot failed:', error);
         }
-        // startServer() (which normally does this) never runs on Vercel, since
-        // the serverless handler uses the exported `app` directly. Seed once
-        // per warm instance here instead, so the QR admin account actually
-        // gets created in production.
-        if (!hasSeeded && env.NODE_ENV !== 'test' && process.env.SEED_ON_BOOT !== 'false') {
-            hasSeeded = true;
-            try {
-                await seedDatabase();
-            } catch (err) {
-                console.error('Seed-on-boot failed (continuing without it):', err);
-            }
-        }
-        next();
-    } catch (err) {
-        next(err);
+      }
+      next();
+    } catch (error) {
+      next(error);
     }
-});
+  });
 
-// Routes
-app.use("/api/v1/example", exampleRoutes);
-app.use("/api/memories", memoryRoutes);
-app.use("/api/community-wall", communityWallRoutes);
-app.use("/api/v1/community-wall", communityWallRoutes);
-app.use("/api/wall", communityWallRoutes);
-app.use("/api/v1/wall", communityWallRoutes);
-app.use("/api/admin/auth", authRoutes);
-app.use("/api/v1/users", usersRoutes);
-app.use("/api/v1/games", gamesRoutes);
-app.use("/api/v1/leaderboard", leaderboardRoutes);
-app.post("/api/qr/auth/login", loginAdmin);
-app.post("/api/qr/auth/logout", logoutAdmin);
-app.use("/api/qr", qrRoutes);
+  app.post('/api/qr/auth/login', authLimiter, loginAdmin);
+  app.post('/api/qr/auth/logout', logoutAdmin);
 
-export async function startServer() {
-    try {
-        const mongoUri = env.MONGO_URI;
-        const port = env.PORT;
-        
-        console.log("Starting server...");
-        await mongoManager.connect(mongoUri);
-        
-        if (env.NODE_ENV !== 'test' && process.env.SEED_ON_BOOT !== 'false') {
-            console.log('Seeding QR database from environment...');
-            try {
-                await seedDatabase();
-            } catch (err) {
-                console.error('Seed-on-boot failed (continuing without it):', err);
-            }
-        }
-        
-        app.listen(port, () => {
-            console.log(`Server is running on port ${port}`);
-        });
-    }
-    catch (err: any) {
-        console.error("Failed to start server:");
-        console.error(err);
-        process.exit(1);
-    }
-}
+  app.use('/api/v1/example', exampleRoutes);
+  app.use('/api/memories', memoryRoutes);
+  app.use('/api/community-wall', communityWallRoutes);
+  app.use('/api/v1/community-wall', communityWallRoutes);
+  app.use('/api/wall', communityWallRoutes);
+  app.use('/api/v1/wall', communityWallRoutes);
+  app.use('/api/admin/auth', authLimiter, authRoutes);
+  app.use('/api/v1/users', usersRoutes);
+  app.use('/api/v1/games', gamesRoutes);
+  app.use('/api/v1/leaderboard', leaderboardRoutes);
+  app.use('/api/qr', qrRoutes);
+  app.use('/api/registrations', registrationRoutes);
+  app.use('/api/jobs', jobRoutes);
+
+  app.use((_req: Request, res: Response) => {
+    res.status(404).json({ error: 'Route not found' });
+  });
+
+  app.use((error: unknown, _req: Request, res: Response, _next: NextFunction) => {
+    console.error('Unhandled request error:', error);
+    res.status(500).json({ error: 'Internal server error' });
+  });
+
+  return app;
+};
+
+const app: Express = envValidation.ok ? buildApp() : buildConfigErrorApp(envValidation.missing);
+
+export const startServer = async (): Promise<void> => {
+  if (!envValidation.ok) {
+    throw new Error(`Environment configuration is invalid: ${envValidation.missing.join('; ')}`);
+  }
+  await mongoManager.connect(env.MONGO_URI);
+  await seedDatabase();
+  app.listen(env.PORT, () => {
+    console.log(`Server listening on port ${env.PORT}`);
+  });
+};
 
 export default app;

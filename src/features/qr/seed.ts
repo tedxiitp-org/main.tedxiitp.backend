@@ -1,91 +1,37 @@
 import mongoose from 'mongoose';
 import bcrypt from 'bcrypt';
-import dotenv from 'dotenv';
-import path from 'path';
 import { Admin } from './model/admin.model.js';
 import { Counter } from './model/counter.model.js';
+import { env } from '../../config/env.js';
 
-// Load env (no-op on hosts like Render where vars come from the environment).
-dotenv.config({ path: path.join(process.cwd(), '.env') });
-
-// Create the account if missing, otherwise update its password + role.
-// (Upsert, so re-seeding with new SEED_* values actually applies them — the
-// old version skipped existing accounts and silently kept the old password.)
-const upsertUser = async (
-  email: string,
-  password: string,
-  role: 'ADMIN' | 'VOLUNTEER'
-) => {
-  const passwordHash = await bcrypt.hash(password, 10);
-  await Admin.findOneAndUpdate(
-    { email },
-    { $set: { password: passwordHash, role } },
-    { upsert: true, new: true }
-  );
-  console.log(`Seeded ${role}: ${email}`);
-};
-
-/**
- * Core seeding logic. Assumes an active mongoose connection. Safe to import
- * and call from the server (does NOT connect or call process.exit).
- */
-export const seedDatabase = async () => {
-  // Ticket sequence counters — create at 0 only if missing (never reset).
+export const seedDatabase = async (): Promise<void> => {
   for (const key of ['ticket_sequence_81', 'ticket_sequence_82']) {
-    await Counter.findOneAndUpdate(
-      { key },
-      { $setOnInsert: { sequence: 0 } },
-      { upsert: true }
-    );
+    await Counter.findOneAndUpdate({ key }, { $setOnInsert: { sequence: 0 } }, { upsert: true });
   }
 
-  // SUPERADMIN_* is the source of truth for the admin account; SEED_ADMIN_* is
-  // still honoured as a fallback for older config. Before this, the seeder read
-  // only SEED_ADMIN_*, so a deployment configured with SUPERADMIN_* left the
-  // admin silently unseeded and every login returned "Invalid credentials".
-  const adminEmail = process.env.SUPERADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL;
-  const adminPassword = process.env.SUPERADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD;
-  if (!adminEmail || !adminPassword) {
-    throw new Error(
-      'Missing admin credentials: set SUPERADMIN_EMAIL + SUPERADMIN_PASSWORD (or SEED_ADMIN_EMAIL + SEED_ADMIN_PASSWORD)'
-    );
-  }
-  await upsertUser(adminEmail, adminPassword, 'ADMIN');
-
-  // Optional bootstrap volunteers from env. These are upserted (so their
-  // passwords stay in sync with the env) but we DO NOT prune anything else:
-  // volunteers the admin creates at runtime must survive server restarts.
-  const volunteerEmailsRaw = process.env.SEED_VOLUNTEER_EMAILS;
-  const volunteerPassword = process.env.SEED_VOLUNTEER_PASSWORD;
-  if (volunteerEmailsRaw && volunteerPassword) {
-    const emails = volunteerEmailsRaw
-      .split(',')
-      .map((e) => e.trim())
-      .filter(Boolean);
-    for (const email of emails) {
-      await upsertUser(email, volunteerPassword, 'VOLUNTEER');
-    }
-  } else {
-    console.log('No SEED_VOLUNTEER_EMAILS/PASSWORD set. Skipping volunteers.');
+  const email = env.SUPERADMIN_EMAIL;
+  const password = env.SUPERADMIN_PASSWORD;
+  if (!email || !password) {
+    throw new Error('Missing SUPERADMIN_EMAIL or SUPERADMIN_PASSWORD');
   }
 
-  console.log('Database seeded successfully!');
+  await Admin.findOneAndUpdate(
+    { email: email.toLowerCase() },
+    {
+      $set: { password: await bcrypt.hash(password, 10), role: 'ADMIN', isActive: true },
+      $setOnInsert: { name: 'Super Admin', allowedSessions: [] },
+    },
+    { upsert: true }
+  );
 };
 
-// When run directly (`npx tsx src/seed.ts`): connect, seed, then exit.
-// When imported by the server, this block does not run. We detect the entry
-// point via argv[1] to stay agnostic to ESM/CJS (avoids import.meta).
 const entry = process.argv[1] ?? '';
-const isRunDirectly = /[\\/]seed\.(ts|js)$/.test(entry);
-
-if (isRunDirectly) {
-  (async () => {
+if (/[\\/]seed\.(ts|js)$/.test(entry)) {
+  void (async () => {
     try {
-      const mongoUri = process.env.MONGO_URI;
-      if (!mongoUri) throw new Error('MONGO_URI is missing');
-      await mongoose.connect(mongoUri);
-      console.log('Connected to MongoDB.');
+      await mongoose.connect(env.MONGO_URI);
       await seedDatabase();
+      console.log('Seed complete.');
       process.exit(0);
     } catch (error) {
       console.error('Seeding failed:', error);

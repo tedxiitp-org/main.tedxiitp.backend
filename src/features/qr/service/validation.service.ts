@@ -6,17 +6,22 @@ export const validateTicketScan = async (qrToken: string, scannedBy: string, cur
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error("JWT_SECRET is missing");
 
-  let payload: any;
+  let payload: Record<string, unknown>;
 
   // verify using JWT 
   try {
-    payload = jwt.verify(qrToken, secret);
+    const verified = jwt.verify(qrToken, secret);
+    if (typeof verified !== 'object' || verified === null) {
+      throw new Error('Malformed token payload');
+    }
+    payload = verified as Record<string, unknown>;
   } catch (error) {
     await logAttendance("UNKNOWN", "UNKNOWN", scannedBy, "FAILED_INVALID");
     return { success: false, status: "FAILED_INVALID", message: "Invalid or forged QR code." };
   }
 
-  const { ticketId, session } = payload;
+  const ticketId = typeof payload.ticketId === 'string' ? payload.ticketId : '';
+  const session = typeof payload.session === 'string' ? payload.session : '';
 
   // find the exact ticket in the db
   const ticket = await Ticket.findOne({ ticketId });
@@ -51,7 +56,7 @@ export const validateTicketScan = async (qrToken: string, scannedBy: string, cur
         status: "USED" 
       } 
     },
-    { new: true }
+    { returnDocument: 'after' }
   );
 
   if (!updatedTicket) {
@@ -87,7 +92,7 @@ export const revokeTicket = async (identifier: { ticketId?: string; email?: stri
     const ticket = await Ticket.findOneAndUpdate(
       { ticketId: identifier.ticketId },
       { status: "REVOKED" },
-      { new: true }
+      { returnDocument: 'after' }
     );
     return ticket ? 1 : 0;
   }

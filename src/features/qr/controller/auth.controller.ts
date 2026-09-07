@@ -1,62 +1,56 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
+import { z } from 'zod';
 import { Admin } from '../model/admin.model.js';
+import { env } from '../../../config/env.js';
+import { AUTH_COOKIE_NAME, buildAuthCookieOptions } from '../../../config/cookie.js';
+import { asyncHandler } from '../../../shared/http.js';
 
-export const loginAdmin = async (req: Request, res: Response): Promise<any> => {
-  try {
-    const { email, password } = req.body;
+const credentialsSchema = z.object({
+  email: z.string().trim().min(1),
+  password: z.string().min(1),
+});
 
-    const admin = await Admin.findOne({ email });
-    if (!admin) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-//     console.log("Admin Object Found:", admin);
-// console.log("Password from body:", password);
-// console.log("Hash from DB:", (admin as any).password);
-
-    const isMatch = await bcrypt.compare(password, (admin as any).password);
-    if (!isMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
-    }
-
-    // Generate JWT
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error("JWT_SECRET is not defined");
-
-    const token = jwt.sign(
-      { id: admin._id, email: admin.email, role: admin.role },
-      secret,
-      { expiresIn: '12h' }
-    );
-
-    // Set HttpOnly Cookie.
-    // In production the frontend (Vercel) and backend (Render) are on different
-    // sites, so the auth cookie must be SameSite=None + Secure to be sent on
-    // cross-site requests. Locally we stay on 'lax'/insecure so it works on http.
-    const isProd = process.env.NODE_ENV === 'production';
-    res.cookie('auth_token', token, {
-      httpOnly: true,
-      secure: isProd, // required when sameSite is 'none'
-      sameSite: isProd ? 'none' : 'lax',
-      maxAge: 12 * 60 * 60 * 1000 // 12 hours
-    });
-
-    return res.status(200).json({ success: true, message: "Logged in successfully", role: admin.role });
-  } catch (error) {
-    console.error("Login Error:", error);
-    return res.status(500).json({ error: "Internal server error" });
+export const loginAdmin = asyncHandler(async (req: Request, res: Response) => {
+  const parsed = credentialsSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Email and password are required' });
+    return;
   }
-};
 
-export const logoutAdmin = (req: Request, res: Response) => {
-  // Attributes must match the ones used when setting the cookie, otherwise the
-  // browser won't clear a SameSite=None; Secure cookie.
-  const isProd = process.env.NODE_ENV === 'production';
-  res.clearCookie('auth_token', {
-    httpOnly: true,
-    secure: isProd,
-    sameSite: isProd ? 'none' : 'lax',
+  const email = parsed.data.email.toLowerCase();
+  const account = await Admin.findOne({ email });
+
+  if (!account || !(await bcrypt.compare(parsed.data.password, account.password))) {
+    res.status(401).json({ error: 'Invalid credentials' });
+    return;
+  }
+
+  if (!account.isActive) {
+    res.status(403).json({ error: 'This account has been deactivated. Contact an admin.' });
+    return;
+  }
+
+  const token = jwt.sign(
+    { id: account._id.toString(), email: account.email, role: account.role },
+    env.JWT_SECRET,
+    { expiresIn: '12h' }
+  );
+
+  await Admin.updateOne({ _id: account._id }, { $set: { lastLoginAt: new Date() } });
+
+  res.cookie(AUTH_COOKIE_NAME, token, buildAuthCookieOptions());
+  res.status(200).json({
+    success: true,
+    message: 'Logged in successfully',
+    role: account.role,
+    allowedSessions: account.allowedSessions,
+    name: account.name,
   });
-  return res.status(200).json({ success: true, message: "Logged out successfully" });
-};
+});
+
+export const logoutAdmin = asyncHandler(async (_req: Request, res: Response) => {
+  res.clearCookie(AUTH_COOKIE_NAME, buildAuthCookieOptions());
+  res.status(200).json({ success: true, message: 'Logged out successfully' });
+});

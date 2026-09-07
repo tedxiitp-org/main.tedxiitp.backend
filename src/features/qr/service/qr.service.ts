@@ -27,7 +27,7 @@ const generateTicketId = async (session: "SESSION_1" | "SESSION_2"): Promise<str
   const counter = await Counter.findOneAndUpdate(
     { key: counterKey },
     { $inc: { sequence: 1 } },
-    { new: true, upsert: true } 
+    { returnDocument: 'after', upsert: true } 
   );
 
   // pad the number with zeroes (1 becomes 0001)
@@ -95,8 +95,8 @@ export const generateTicketAndQR = async (
       qrCode: qrImageURL,
       qrToken: qrToken
     };
-  } catch (err: any) {
-    if (err?.code === 11000) {
+  } catch (err: unknown) {
+    if (typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000) {
       // (Any index violations, though we removed unique transaction IDs)
     }
     throw err;

@@ -3,7 +3,7 @@ import type { AuthenticatedRequest, JwtPayload, SuccessResponse } from '../../..
 import { signToken } from '../../../services/token.service.js';
 import { Admin } from '../admin.model.js';
 import type { IAdmin } from '../admin.model.js';
-import { AUTH_COOKIE_NAME, SESSION_COOKIE_NAME, cookieOptions } from '../../../config/cookie.js';
+import { AUTH_COOKIE_NAME, SESSION_COOKIE_NAME, buildAuthCookieOptions } from '../../../config/cookie.js';
 
 // login handeler
 // Runs after Passport has verified credentials and called req.logIn()
@@ -27,7 +27,7 @@ export async function loginHandler(
   void Admin.findByIdAndUpdate(admin.id, { lastLoginAt: new Date() });
 
   //secure httponly cookie containing the jwt
-  res.cookie(AUTH_COOKIE_NAME, token, cookieOptions);
+  res.cookie(AUTH_COOKIE_NAME, token, buildAuthCookieOptions());
 
   const body: SuccessResponse<Omit<IAdmin, 'hashedPassword'>> = {
     success: true,

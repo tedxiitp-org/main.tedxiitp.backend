@@ -1,11 +1,18 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import { Ticket } from '../model/ticket.model.js';
 import { generateTicketAndQR, DuplicateTicketError, DuplicateTransactionError } from '../service/qr.service.js';
 import { validateTicketScan, revokeTicket } from '../service/validation.service.js';
 import { getAttendanceStats, getVolunteerScanStats } from '../service/attendance.service.js';
 import { sendTicketEmail, isEmailConfigured } from '../service/email.service.js';
-import { BulkJob, BulkJobItem } from '../model/bulkjob.model.js';
-import pLimit from 'p-limit';
+import { z } from 'zod';
+import { getPrincipal } from '../../../shared/principal.js';
+import { canScanSession } from '../../../middleware/auth.middleware.js';
+import { sessionSchema } from '../../../shared/domain.js';
+
+const scanSchema = z.object({
+  qrToken: z.string().min(1),
+  currentScanningSession: sessionSchema,
+});
 
 type ValidSession = "SESSION_1" | "SESSION_2";
 
@@ -29,13 +36,13 @@ const tryEmailTicket = async (
       qrDataUrl: ticketData.qrCode,
     });
     return { emailSent: true };
-  } catch (err: any) {
-    console.error(`Failed to email ticket to ${to}:`, err?.message || err);
-    return { emailSent: false, emailError: err?.message || "Send failed" };
+  } catch (err: unknown) {
+    console.error(`Failed to email ticket to ${to}:`, err instanceof Error ? err.message : err);
+    return { emailSent: false, emailError: err instanceof Error ? err.message : 'Send failed' };
   }
 };
 
-export const generateTicket = async (req: Request, res: Response): Promise<any> => {
+export const generateTicket = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { email, session, transactionId, name } = req.body;
 
@@ -59,7 +66,7 @@ export const generateTicket = async (req: Request, res: Response): Promise<any> 
       data: { ...ticketData, ...emailResult }
     });
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     if (error instanceof DuplicateTicketError || error instanceof DuplicateTransactionError) {
       return res.status(409).json({ success: false, error: error.message });
     }
@@ -69,205 +76,25 @@ export const generateTicket = async (req: Request, res: Response): Promise<any> 
 };
 
 // Async worker to process the queue in the background
-const bulkWorker = async (jobId: string) => {
-  const limit = pLimit(1); // Process 1 at a time to prevent SMTP rate limits
-
-  await BulkJob.findByIdAndUpdate(jobId, { status: 'PROCESSING' });
-
-  const items = await BulkJobItem.find({ jobId, status: 'pending' });
-
-  const tasks = items.map((item) =>
-    limit(async () => {
-      const email = (item.email || "").trim();
-      let status: 'generated' | 'duplicate' | 'error' = 'error';
-      let message: string | undefined = undefined;
-      let ticketId: string | undefined = undefined;
-      let emailSent = false;
-      const validSession = item.session as ValidSession;
-
-      if (!email) {
-        status = 'error';
-        message = 'Missing email';
-      } else if (!item.transactionId) {
-        status = 'error';
-        message = 'Missing transaction ID';
-      } else if (validSession !== 'SESSION_1' && validSession !== 'SESSION_2') {
-        status = 'error';
-        message = 'Invalid session';
-      } else {
-        try {
-          const ticketData = await generateTicketAndQR(email, validSession, item.transactionId, item.name);
-          const emailResult = await tryEmailTicket(email, item.name, ticketData, validSession);
-          status = 'generated';
-          ticketId = ticketData.ticketId;
-          emailSent = emailResult.emailSent;
-          message = emailResult.emailError;
-          
-          // Add a small delay between emails to avoid spam/rate limit blocks from SMTP providers
-          await new Promise(resolve => setTimeout(resolve, 1500));
-        } catch (error: any) {
-          if (error instanceof DuplicateTicketError || error instanceof DuplicateTransactionError) {
-            status = 'duplicate';
-            message = error.message;
-          } else {
-            console.error(`Bulk generate failed for ${email} in ${validSession}:`, error?.message || error);
-            status = 'error';
-            message = 'Generation failed';
-          }
-        }
-      }
-
-      await BulkJobItem.findByIdAndUpdate(item._id,
-        { status, ticketId, emailSent, message }
-      );
-
-      await BulkJob.findByIdAndUpdate(jobId, { $inc: { processedRecords: 1 } });
-    })
-  );
-
-  await Promise.allSettled(tasks);
-  await BulkJob.findByIdAndUpdate(jobId, { status: 'COMPLETED' });
-};
-
-export const generateTicketsBulk = async (req: Request, res: Response): Promise<any> => {
+export const validateScan = async (req: Request, res: Response): Promise<Response | void> => {
   try {
-    const { attendees } = req.body as {
-      attendees: { email: string; transactionId: string; name?: string; session: string }[];
-    };
-
-    const adminId = (req as any).user?._id || (req as any).user?.id;
-    if (!adminId) return res.status(401).json({ error: "Unauthorized" });
-
-    if (!Array.isArray(attendees) || attendees.length === 0) {
-      return res.status(400).json({ error: "attendees array is required" });
+    const parsed = scanSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: "qrToken and a valid currentScanningSession are required" });
     }
 
-    // Idempotency Check: Reject if there is already a PENDING or PROCESSING job for this admin
-    const activeJob = await BulkJob.findOne({ adminId, status: { $in: ['PENDING', 'PROCESSING'] } });
-    if (activeJob) {
-      return res.status(409).json({ success: false, error: "An active bulk generation job is already running." });
+    const principal = getPrincipal(req);
+    const { qrToken, currentScanningSession } = parsed.data;
+
+    if (!canScanSession(principal, currentScanningSession)) {
+      return res.status(403).json({
+        success: false,
+        status: "FAILED_SESSION_NOT_ALLOWED",
+        message: `You are not assigned to ${currentScanningSession}.`,
+      });
     }
 
-    const job = await BulkJob.create({
-      adminId,
-      totalRecords: attendees.length,
-      processedRecords: 0,
-      status: 'PENDING'
-    });
-
-    const items = attendees.map(a => ({
-      jobId: job._id,
-      email: (a?.email || "").trim(),
-      name: a?.name,
-      transactionId: a?.transactionId || "",
-      session: a?.session || "UNRECOGNIZED",
-      status: 'pending'
-    }));
-    await BulkJobItem.insertMany(items);
-
-    // Trigger async processing
-    bulkWorker(job._id.toString()).catch(err => {
-      console.error("Bulk Worker crashed:", err);
-      BulkJob.findByIdAndUpdate(job._id, { status: 'FAILED' }).exec();
-    });
-
-    return res.status(202).json({
-      success: true,
-      message: `Bulk job accepted for ${attendees.length} ticket(s).`,
-      jobId: job._id
-    });
-  } catch (error) {
-    console.error("Bulk Generation Error:", error);
-    return res.status(500).json({ success: false, error: "Internal Server Error" });
-  }
-};
-
-export const getBulkJobStatus = async (req: Request, res: Response): Promise<any> => {
-  try {
-    const adminId = (req as any).user?._id || (req as any).user?.id;
-    if (!adminId) return res.status(401).json({ error: "Unauthorized" });
-
-    const jobId = req.params.jobId;
-    const job = await BulkJob.findOne({ _id: jobId, adminId });
-    if (!job) {
-      return res.status(404).json({ error: "Job not found or unauthorized" });
-    }
-
-    const items = await BulkJobItem.find({ jobId }).lean();
-
-    return res.status(200).json({
-      success: true,
-      data: {
-        jobId: job._id,
-        status: job.status,
-        totalRecords: job.totalRecords,
-        processedRecords: job.processedRecords,
-        items
-      }
-    });
-  } catch (error) {
-    console.error("Bulk Job Status Error:", error);
-    return res.status(500).json({ success: false, error: "Internal Server Error" });
-  }
-};
-
-export const checkDuplicates = async (req: Request, res: Response): Promise<any> => {
-  try {
-    const { items } = req.body as { items: { email: string; session: string; transactionId: string }[] };
-    
-    if (!Array.isArray(items)) {
-      return res.status(400).json({ error: "items array is required" });
-    }
-
-    const adminId = (req as any).user?._id || (req as any).user?.id;
-    if (!adminId) return res.status(401).json({ error: "Unauthorized" });
-
-    // For each item, check if a Ticket exists or if the transactionId is already used
-    const results = await Promise.all(items.map(async (item) => {
-      if (item.session === 'UNRECOGNIZED') {
-         return { email: item.email, session: item.session, exists: false };
-      }
-      // Check if this exact ticket (same email, session, and transactionId) is already generated
-      if (item.email && item.session && item.transactionId) {
-        const existingTicket = await Ticket.findOne({
-          email: item.email,
-          session: item.session as "SESSION_1" | "SESSION_2",
-          transactionId: item.transactionId
-        });
-        
-        if (existingTicket) {
-          return { email: item.email, session: item.session, exists: true, reason: "Ticket already generated" };
-        }
-      }
-
-      return { email: item.email, session: item.session, exists: false };
-    }));
-
-    return res.status(200).json({ success: true, data: results });
-  } catch (error) {
-    console.error("checkDuplicates Error:", error);
-    return res.status(500).json({ success: false, error: "Internal Server Error" });
-  }
-};
-
-export const validateScan = async (req: Request, res: Response): Promise<any> => {
-  try {
-    // 1. Frontend only sends the token and what gate they are at
-    const { qrToken, currentScanningSession } = req.body;
-
-    // 2. Security Fix: Extract volunteer/admin ID securely from Passport session
-    const scannedBy = (req as any).user?._id || (req as any).user?.id;
-
-    if (!scannedBy) {
-       return res.status(401).json({ error: "Unauthorized: No volunteer session found" });
-    }
-
-    if (!qrToken || !currentScanningSession) {
-      return res.status(400).json({ error: "qrToken and currentScanningSession are required" });
-    }
-
-    // 3. Pass the current gate session to the service
-    const result = await validateTicketScan(qrToken, scannedBy, currentScanningSession);
+    const result = await validateTicketScan(qrToken, principal.id, currentScanningSession);
 
     if (result.success) {
       return res.status(200).json(result);
@@ -275,7 +102,7 @@ export const validateScan = async (req: Request, res: Response): Promise<any> =>
       return res.status(403).json(result);
     }
 
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("QR Validation Error:", error);
     return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
@@ -284,7 +111,7 @@ export const validateScan = async (req: Request, res: Response): Promise<any> =>
 // Full attendee roster for one session: every generated ticket plus whether the
 // holder has been scanned in (Attending) or not yet (Absent). Drives the admin
 // attendee-list panel, which switches between sessions client-side.
-export const getAttendees = async (req: Request, res: Response): Promise<any> => {
+export const getAttendees = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const session = req.query.session;
     if (session !== "SESSION_1" && session !== "SESSION_2") {
@@ -323,7 +150,7 @@ export const getAttendees = async (req: Request, res: Response): Promise<any> =>
   }
 };
 
-export const getStats = async (req: Request, res: Response): Promise<any> => {
+export const getStats = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const stats = await getAttendanceStats();
     
@@ -337,7 +164,7 @@ export const getStats = async (req: Request, res: Response): Promise<any> => {
   }
 };
 
-export const getVolunteerStats = async (req: Request, res: Response): Promise<any> => {
+export const getVolunteerStats = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const stats = await getVolunteerScanStats();
     return res.status(200).json({ success: true, data: stats });
@@ -347,12 +174,12 @@ export const getVolunteerStats = async (req: Request, res: Response): Promise<an
   }
 };
 
-export const handleRevoke = async (req: Request, res: Response): Promise<any> => {
+export const handleRevoke = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { ticketId, email } = req.body;
 
     // Security check for revoking
-    const adminId = (req as any).user?._id || (req as any).user?.id;
+    const adminId = getPrincipal(req).id;
     if (!adminId) return res.status(401).json({ error: "Unauthorized" });
 
     if (!ticketId && !email) {
@@ -376,11 +203,11 @@ export const handleRevoke = async (req: Request, res: Response): Promise<any> =>
 
 // Bulk revoke by a list of emails (one request, mirrors generate-bulk). Returns
 // a per-email result so the UI can show which rows were actually revoked.
-export const handleRevokeBulk = async (req: Request, res: Response): Promise<any> => {
+export const handleRevokeBulk = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const { emails } = req.body as { emails: string[] };
 
-    const adminId = (req as any).user?._id || (req as any).user?.id;
+    const adminId = getPrincipal(req).id;
     if (!adminId) return res.status(401).json({ error: "Unauthorized" });
 
     if (!Array.isArray(emails) || emails.length === 0) {
@@ -401,8 +228,8 @@ export const handleRevokeBulk = async (req: Request, res: Response): Promise<any
           status: revokedCount > 0 ? "revoked" : "not_found",
           revokedCount,
         });
-      } catch (error: any) {
-        console.error(`Bulk revoke failed for ${email}:`, error?.message || error);
+      } catch (error: unknown) {
+        console.error(`Bulk revoke failed for ${email}:`, error instanceof Error ? error.message : error);
         results.push({ email, status: "error", message: "Revocation failed" });
       }
     }
@@ -418,7 +245,7 @@ export const handleRevokeBulk = async (req: Request, res: Response): Promise<any
   }
 };
 
-export const exportAttendees = async (req: Request, res: Response): Promise<any> => {
+export const exportAttendees = async (req: Request, res: Response): Promise<Response | void> => {
   try {
     const session = req.query.session;
     const filter: any = {};

@@ -1,41 +1,91 @@
-import { Request, Response, NextFunction } from 'express';
+import type { NextFunction, Request, RequestHandler, Response } from 'express';
 import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+import { Admin } from '../features/qr/model/admin.model.js';
+import { AUTH_COOKIE_NAME } from '../config/cookie.js';
+import { accountRoleSchema, sessionSchema } from '../shared/domain.js';
+import type { Session } from '../shared/domain.js';
 
+interface TokenClaims {
+  id: string;
+  email: string;
+  role: string;
+}
 
-export const requireAuth = (req: Request, res: Response, next: NextFunction): any => {
+const readClaims = (token: string): TokenClaims | null => {
   try {
-    // read the cookie named 'auth_token'
-    const token = req.cookies?.auth_token;
-
-    if (!token) {
-      return res.status(401).json({ error: "Unauthorized: No session found. Please log in." });
-    }
-
-    const secret = process.env.JWT_SECRET;
-    if (!secret) throw new Error("JWT_SECRET is missing");
-
-    // Decrypt the token
-    const decoded = jwt.verify(token, secret);
-    
-   
-    (req as any).user = decoded;
-
-    next(); // pass control to the next function
-  } catch (error) {
-    return res.status(401).json({ error: "Unauthorized: Invalid or expired session." });
+    const decoded = jwt.verify(token, env.JWT_SECRET);
+    if (typeof decoded !== 'object' || decoded === null) return null;
+    const payload = decoded as Record<string, unknown>;
+    const id = typeof payload.id === 'string' ? payload.id : null;
+    const email = typeof payload.email === 'string' ? payload.email : null;
+    const role = typeof payload.role === 'string' ? payload.role : null;
+    if (!id || !email || !role) return null;
+    return { id, email, role };
+  } catch {
+    return null;
   }
 };
 
-
-export const requireAdmin = (req: Request, res: Response, next: NextFunction): any => {
-
-  const user = (req as any).user;
-  
-  // verify the role
-  if (user && user.role === 'ADMIN') {
-    next(); 
-  } else {
-    // 403 Forbidden
-    return res.status(403).json({ error: "Access Denied: Admin privileges required." });
+export const requireAuth: RequestHandler = async (
+  req: Request,
+  res: Response,
+  next: NextFunction
+): Promise<void> => {
+  const token = req.cookies?.[AUTH_COOKIE_NAME] as string | undefined;
+  if (!token) {
+    res.status(401).json({ error: 'Unauthorized: no active session. Please sign in.' });
+    return;
   }
+
+  const claims = readClaims(token);
+  if (!claims) {
+    res.status(401).json({ error: 'Unauthorized: invalid or expired session.' });
+    return;
+  }
+
+  const account = await Admin.findById(claims.id)
+    .select('email role isActive allowedSessions')
+    .lean();
+
+  if (!account || !account.isActive) {
+    res.status(401).json({ error: 'Unauthorized: this account is no longer active.' });
+    return;
+  }
+
+  const role = accountRoleSchema.safeParse(account.role);
+  if (!role.success) {
+    res.status(401).json({ error: 'Unauthorized: account role is invalid.' });
+    return;
+  }
+
+  const allowedSessions = (account.allowedSessions ?? []).filter(
+    (value): value is Session => sessionSchema.safeParse(value).success
+  );
+
+  req.principal = {
+    id: account._id.toString(),
+    email: account.email,
+    role: role.data,
+    allowedSessions,
+  };
+
+  next();
+};
+
+export const requireAdmin: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+  if (req.principal?.role !== 'ADMIN') {
+    res.status(403).json({ error: 'Access denied: admin privileges required.' });
+    return;
+  }
+  next();
+};
+
+export const canScanSession = (
+  principal: { role: string; allowedSessions: Session[] },
+  session: Session
+): boolean => {
+  if (principal.role === 'ADMIN') return true;
+  if (principal.allowedSessions.length === 0) return true;
+  return principal.allowedSessions.includes(session);
 };

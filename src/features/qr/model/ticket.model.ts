@@ -1,35 +1,56 @@
-import mongoose, { Document, Schema } from 'mongoose';
+import mongoose, { Schema } from 'mongoose';
+import type { Model, Types } from 'mongoose';
+import { SESSIONS, TICKET_STATUSES } from '../../../shared/domain.js';
+import type { Session, TicketStatus } from '../../../shared/domain.js';
 
-export interface ITicket extends Document {
+export interface ITicket {
+  _id: Types.ObjectId;
   ticketId: string;
+  registrationId: Types.ObjectId | null;
   email: string;
-  name?: string;
+  name: string | null;
   userId: string;
-  session: "SESSION_1" | "SESSION_2";
+  session: Session;
   transactionId: string;
   qrToken: string;
-
-  status: "ACTIVE" | "REVOKED" | "USED";
+  status: TicketStatus;
   isCheckedIn: boolean;
-  checkedInAt?: Date;
+  checkedInAt: Date | null;
+  emailedAt: Date | null;
+  emailAttempts: number;
+  lastEmailError: string | null;
+  createdAt: Date;
+  updatedAt: Date;
 }
 
-const ticketSchema = new Schema<ITicket>({
-  ticketId: { type: String, required: true, unique: true },
-  email: { type: String, required: true },
-  // Optional attendee name, captured at generation so the admin attendee list
-  // can show a human-readable name alongside the email. Tickets created before
-  // this field existed simply won't have one.
-  name: { type: String },
-  userId: { type: String, required: true },
-  session: { type: String, enum: ["SESSION_1", "SESSION_2"], required: true },
-  transactionId: { type: String, required: true },
-  qrToken: { type: String, required: true },
-  status: { type: String, enum: ["ACTIVE", "REVOKED", "USED"], default: "ACTIVE" },
-  isCheckedIn: { type: Boolean, default: false },
-  checkedInAt: { type: Date }
-}, { timestamps: true });
+const ticketSchema = new Schema<ITicket>(
+  {
+    ticketId: { type: String, required: true, unique: true },
+    registrationId: { type: Schema.Types.ObjectId, ref: 'Registration', default: null },
+    email: { type: String, required: true, lowercase: true, trim: true },
+    name: { type: String, default: null },
+    userId: { type: String, required: true },
+    session: { type: String, enum: SESSIONS, required: true },
+    transactionId: { type: String, required: true },
+    qrToken: { type: String, required: true },
+    status: { type: String, enum: TICKET_STATUSES, default: 'ACTIVE' },
+    isCheckedIn: { type: Boolean, default: false },
+    checkedInAt: { type: Date, default: null },
+    emailedAt: { type: Date, default: null },
+    emailAttempts: { type: Number, default: 0 },
+    lastEmailError: { type: String, default: null },
+  },
+  { timestamps: true }
+);
 
-// (An attendee may hold multiple tickets per session if they have multiple transaction IDs)
+ticketSchema.index(
+  { registrationId: 1, session: 1 },
+  { unique: true, partialFilterExpression: { registrationId: { $type: 'objectId' } } }
+);
+ticketSchema.index({ email: 1, session: 1 });
+ticketSchema.index({ session: 1, isCheckedIn: 1 });
+ticketSchema.index({ createdAt: -1 });
 
-export const Ticket = mongoose.model<ITicket>('Ticket', ticketSchema);
+export const Ticket: Model<ITicket> =
+  (mongoose.models.Ticket as Model<ITicket> | undefined) ??
+  mongoose.model<ITicket>('Ticket', ticketSchema);
