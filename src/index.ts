@@ -5,6 +5,7 @@ import cookieParser from 'cookie-parser';
 import rateLimit from 'express-rate-limit';
 import { mongoManager } from './db/mongo.js';
 import { env, envValidation } from './config/env.js';
+import { allowedOrigins, corsOptions } from './config/cors.js';
 import { createSessionMiddleware } from './config/session.js';
 import passport from './config/passport.js';
 import { exampleRoutes } from './features/example/example.routes.js';
@@ -37,28 +38,19 @@ const buildConfigErrorApp = (missing: string[]): Express => {
 const buildApp = (): Express => {
   const app = express();
 
-  const allowedOrigins = [env.CLIENT_URL, 'http://localhost:3000', 'http://localhost:3001'].filter(
-    (value): value is string => Boolean(value)
-  );
-
   app.set('trust proxy', 1);
 
-  app.use(
-    cors({
-      origin: (origin, callback) => {
-        if (!origin) {
-          callback(null, true);
-          return;
-        }
-        if (allowedOrigins.includes(origin) || env.NODE_ENV === 'development') {
-          callback(null, true);
-          return;
-        }
-        callback(null, false);
-      },
-      credentials: true,
-    })
-  );
+  console.log(`CORS allows: ${[...allowedOrigins].join(', ')}`);
+
+  app.use(cors(corsOptions));
+
+  app.use((req: Request, res: Response, next: NextFunction) => {
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
 
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true }));
