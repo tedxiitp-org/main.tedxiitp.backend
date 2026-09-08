@@ -9,7 +9,7 @@ try {
 
 const envSchema = z.object({
   NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-  PORT: z.string().default('5000').transform((value) => Number.parseInt(value, 10)),
+  PORT: z.string().default('5001').transform((value) => Number.parseInt(value, 10)),
   CLIENT_URL: z.string().default('http://localhost:3000'),
   MONGO_URI: z.string().min(1, 'MONGO_URI is required'),
   JWT_SECRET: z.string().min(16, 'JWT_SECRET must be at least 16 characters'),
