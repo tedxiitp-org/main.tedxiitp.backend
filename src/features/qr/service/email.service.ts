@@ -164,7 +164,7 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
       <ul style="padding-left: 20px; margin-top: 0;">
         <li style="margin-bottom: 8px;">All attendees must report to the venue for verification before the session begins.</li>
         <li style="margin-bottom: 8px;">Verification for Session ${getSessionNumber(session)} will begin from <strong>${getVerificationTiming(session)}</strong>. Please use the QR code sent to your registered email for verification.</li>
-        <li style="margin-bottom: 8px;">On-spot registration will be available for attendees who have not booked their tickets yet.</li>
+        <li style="margin-bottom: 8px;">On-spot registration will be available <b>"only for campus students."</b></li>
         <li style="margin-bottom: 8px;">No entries will be permitted once the session has started. We strongly recommend arriving well in advance.</li>
         <li style="margin-bottom: 8px;">At the time of registration/check-in, attendees are required to carry:
           <ul style="padding-left: 20px; margin-top: 5px;">
