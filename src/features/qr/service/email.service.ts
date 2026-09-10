@@ -17,7 +17,7 @@ const getConfig = () => ({
   secure: process.env.SMTP_SECURE === 'true', // true => port 465
   user: process.env.SMTP_USER,
   pass: process.env.SMTP_PASS,
-  from: process.env.SMTP_FROM || 'TEDxIITPatna <no-reply@tedx.com>',
+  from: process.env.SMTP_FROM || 'TEDxIIT Patna <no-reply@tedx.com>',
 });
 
 // Email is optional. If no host is configured we simply skip sending so ticket
@@ -86,6 +86,10 @@ interface TicketEmailInput {
 const prettySession = (session: string) =>
   session === 'SESSION_1' ? 'Session 1' : 'Session 2';
 
+const getSessionNumber = (session: string) => session === 'SESSION_1' ? '1' : '2';
+const getSessionTiming = (session: string) => session === 'SESSION_1' ? '9:30 AM - 1:30 PM' : '2:30 PM - 5:30 PM';
+const getVerificationTiming = (session: string) => session === 'SESSION_1' ? '8:30 AM' : '1:30 PM';
+
 /**
  * Send the attendee their ticket: QR shown inline in the body AND attached as a
  * downloadable PNG, with the ticket id + session. Throws on send failure so the
@@ -99,7 +103,7 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
   // the raw bytes for the attachment / inline CID image.
   const base64 = qrDataUrl.split(',')[1] ?? '';
   const qrBuffer = Buffer.from(base64, 'base64');
-  const greeting = name ? `Hi ${name},` : 'Hello,';
+  const greeting = name ? `Dear ${name},` : 'Dear Attendee,';
 
   const html = `
   <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #f4f4f4; padding: 30px 15px;">
@@ -143,6 +147,43 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
       </tr>
     </table>
     
+    <div style="max-width: 600px; margin: 30px auto 0; font-size: 14px; color: #333; line-height: 1.6; background: #fff; padding: 25px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+      <p style="margin-top: 0;">We are thrilled to welcome you to TEDxIIT Patna, a day of inspiring ideas, meaningful conversations, and stories that have the power to spark change.</p>
+      
+      <p>Please find the schedule below:</p>
+
+      <h3 style="color: #e62b1e; margin-top: 20px; margin-bottom: 10px; font-size: 18px;">Event Schedule</h3>
+      <p style="margin: 0;"><strong>Date:</strong> 13 September 2026</p>
+      <p style="margin: 0;"><strong>Session ${getSessionNumber(session)}:</strong> ${getSessionTiming(session)}</p>
+      
+      <h3 style="color: #e62b1e; margin-top: 20px; margin-bottom: 10px; font-size: 18px;">Venue</h3>
+      <p style="margin: 0;">Auditorium<br/>IIT Patna</p>
+
+      <h3 style="color: #e62b1e; margin-top: 20px; margin-bottom: 10px; font-size: 18px;">Important Guidelines for Attendees</h3>
+      <p>To ensure a smooth and hassle-free experience, please keep the following guidelines in mind:</p>
+      <ul style="padding-left: 20px; margin-top: 0;">
+        <li style="margin-bottom: 8px;">All attendees must report to the venue for verification before the session begins.</li>
+        <li style="margin-bottom: 8px;">Verification for Session ${getSessionNumber(session)} will begin from <strong>${getVerificationTiming(session)}</strong>. Please use the QR code sent to your registered email for verification.</li>
+        <li style="margin-bottom: 8px;">On-spot registration will be available for attendees who have not booked their tickets yet.</li>
+        <li style="margin-bottom: 8px;">No entries will be permitted once the session has started. We strongly recommend arriving well in advance.</li>
+        <li style="margin-bottom: 8px;">At the time of registration/check-in, attendees are required to carry:
+          <ul style="padding-left: 20px; margin-top: 5px;">
+            <li style="margin-bottom: 4px;">College ID card or any valid Government ID proof</li>
+            <li style="margin-bottom: 4px;">A screenshot of your payment details</li>
+            <li style="margin-bottom: 4px;">QR code sent to the registered email.</li>
+          </ul>
+        </li>
+      </ul>
+      <p>Keeping these documents readily available will help ensure a quick and hassle-free check-in process.</p>
+
+      <h3 style="color: #e62b1e; margin-top: 20px; margin-bottom: 10px; font-size: 18px;">Please Arrive on Time</h3>
+      <p>We encourage everyone to plan their arrival accordingly and complete the verification process before the session begins. Late entry may not be permitted once the session is underway.</p>
+      
+      <p style="margin-top: 20px;">We look forward to welcoming you to TEDxIIT Patna and taking you on a journey into <strong>Terra Incognita</strong>, a space for unexplored ideas, new perspectives, and meaningful conversations.</p>
+      
+      <p style="margin-top: 20px; font-weight: bold; font-size: 16px;">See you at TEDxIIT Patna!</p>
+    </div>
+
     <p style="color: #888888; font-size: 12px; margin-top: 25px; text-align: center; line-height: 1.5;">This ticket is unique to you. Do not share it.<br>It can only be checked in once.</p>
   </div>`;
 
@@ -150,7 +191,7 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
   await tx.sendMail({
     from: getConfig().from,
     to,
-    subject: `Your TEDxIITPatna Ticket — ${prettySession(session)}`,
+    subject: `Your TEDxIIT Patna Ticket — ${prettySession(session)}`,
     html,
     attachments: [
       // 1. Inline QR code for the HTML template
