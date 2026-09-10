@@ -1,4 +1,6 @@
 import type { AnyBulkWriteOperation } from 'mongoose';
+import { Types } from 'mongoose';
+import { Ticket } from '../qr/model/ticket.model.js';
 import { Registration } from './registration.model.js';
 import type { IRegistration } from './registration.model.js';
 import { normalizeSheet } from './normalize.js';
@@ -16,10 +18,13 @@ export interface SyncResult {
   updated: number;
   unchanged: number;
   duplicatesMarked: number;
+  removedFromSheet: number;
+  restored: number;
+  keptDespiteRemoval: number;
   syncedAt: Date;
 }
 
-const sheetFields = (row: NormalizedRegistration) => ({
+const sheetFields = (row: NormalizedRegistration, syncedAt: Date) => ({
   sourceRow: row.sourceRow,
   submittedAt: row.submittedAt,
   name: row.name,
@@ -37,7 +42,7 @@ const sheetFields = (row: NormalizedRegistration) => ({
   address: row.address,
   comments: row.comments,
   flags: row.flags,
-  lastSyncedAt: new Date(),
+  lastSyncedAt: syncedAt,
 });
 
 export const syncRegistrations = async (rows: string[][]): Promise<SyncResult> => {
@@ -53,6 +58,9 @@ export const syncRegistrations = async (rows: string[][]): Promise<SyncResult> =
       updated: 0,
       unchanged: 0,
       duplicatesMarked: 0,
+      removedFromSheet: 0,
+      restored: 0,
+      keptDespiteRemoval: 0,
       syncedAt,
     };
   }
@@ -69,7 +77,7 @@ export const syncRegistrations = async (rows: string[][]): Promise<SyncResult> =
   const existingHashes = new Set(existing.map((doc) => doc.sourceHash));
 
   const operations: AnyBulkWriteOperation<IRegistration>[] = normalized.map((row) => {
-    const set: RegistrationUpdate = sheetFields(row);
+    const set: RegistrationUpdate = sheetFields(row, syncedAt);
     if (!manualEmailHashes.has(row.sourceHash)) {
       set.email = row.email;
       set.emailSource = row.emailSource;
@@ -94,7 +102,13 @@ export const syncRegistrations = async (rows: string[][]): Promise<SyncResult> =
   const created = result.upsertedCount ?? 0;
   const updated = result.modifiedCount ?? 0;
 
+  const restored = await Registration.updateMany(
+    { lastSyncedAt: syncedAt, status: 'REMOVED' },
+    { $set: { status: 'PENDING' } }
+  );
+
   const duplicatesMarked = await markDuplicates();
+  const reconciliation = await reconcileRemovals(syncedAt);
 
   return {
     rowsRead: normalized.length,
@@ -104,8 +118,50 @@ export const syncRegistrations = async (rows: string[][]): Promise<SyncResult> =
     updated: Math.min(updated, distinctHashes - created),
     unchanged: Math.max(distinctHashes - created - updated, 0),
     duplicatesMarked,
+    removedFromSheet: reconciliation.removed,
+    restored: restored.modifiedCount,
+    keptDespiteRemoval: reconciliation.kept,
     syncedAt,
   };
+};
+
+const registrationIdsWithTickets = async (): Promise<Types.ObjectId[]> => {
+  const ids = await Ticket.distinct('registrationId', { registrationId: { $ne: null } });
+  return ids.filter((id): id is Types.ObjectId => id instanceof Types.ObjectId);
+};
+
+export const reconcileRemovals = async (
+  syncedAt: Date
+): Promise<{ removed: number; kept: number }> => {
+  const ticketed = await registrationIdsWithTickets();
+  const missing = { lastSyncedAt: { $lt: syncedAt }, status: { $ne: 'REMOVED' as const } };
+
+  const kept = await Registration.countDocuments({ ...missing, _id: { $in: ticketed } });
+
+  const outcome = await Registration.updateMany(
+    { ...missing, _id: { $nin: ticketed } },
+    { $set: { status: 'REMOVED' } }
+  );
+
+  return { removed: outcome.modifiedCount, kept };
+};
+
+export const restoreTicketedRegistrations = async (): Promise<number> => {
+  const ticketed = await registrationIdsWithTickets();
+  const outcome = await Registration.updateMany(
+    { _id: { $in: ticketed }, status: 'REMOVED' },
+    { $set: { status: 'APPROVED' } }
+  );
+  return outcome.modifiedCount;
+};
+
+export const purgeRemoved = async (): Promise<number> => {
+  const ticketed = await registrationIdsWithTickets();
+  const outcome = await Registration.deleteMany({
+    status: 'REMOVED',
+    _id: { $nin: ticketed },
+  });
+  return outcome.deletedCount;
 };
 
 export const markDuplicates = async (): Promise<number> => {

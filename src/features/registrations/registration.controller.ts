@@ -1,7 +1,13 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { Registration } from './registration.model.js';
-import { getSyncStatus, syncFromGoogleSheet, syncIfStale, syncRegistrations } from './sync.service.js';
+import {
+  getSyncStatus,
+  purgeRemoved,
+  syncFromGoogleSheet,
+  syncIfStale,
+  syncRegistrations,
+} from './sync.service.js';
 import { isSheetsConfigured, sheetsMode } from './sheets.service.js';
 import { timingSafeEqual } from 'node:crypto';
 import { env } from '../../config/env.js';
@@ -48,6 +54,7 @@ export const listRegistrations = asyncHandler(async (req: Request, res: Response
 
   const filter: Record<string, unknown> = {};
   if (status) filter.status = status;
+  else filter.status = { $ne: 'REMOVED' };
   if (tier) filter.tier = tier;
   else if (includeMerchOnly !== 'true') filter.tier = { $ne: 'MERCH_ONLY' };
   if (flagged === 'true') filter['flags.0'] = { $exists: true };
@@ -316,4 +323,9 @@ export const sheetWebhook = asyncHandler(async (req: Request, res: Response) => 
     const message = error instanceof Error ? error.message : 'Sheet sync failed';
     res.status(502).json({ error: message });
   }
+});
+
+export const purgeRemovedRegistrations = asyncHandler(async (_req: Request, res: Response) => {
+  const deleted = await purgeRemoved();
+  res.status(200).json({ success: true, data: { deleted } });
 });

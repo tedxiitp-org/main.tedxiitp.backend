@@ -24,6 +24,7 @@ export const REGISTRATION_STATUSES = [
   'APPROVED',
   'REJECTED',
   'DUPLICATE',
+  'REMOVED',
 ] as const;
 export const registrationStatusSchema = z.enum(REGISTRATION_STATUSES);
 export type RegistrationStatus = z.infer<typeof registrationStatusSchema>;

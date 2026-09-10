@@ -9,6 +9,7 @@ import {
   getSyncState,
   importRows,
   listRegistrations,
+  purgeRemovedRegistrations,
   rejectRegistration,
   sheetWebhook,
   syncSheet,
@@ -28,6 +29,7 @@ router.post('/sync', syncSheet);
 router.post('/auto-sync', autoSync);
 router.post('/import', importRows);
 router.post('/bulk-approve', bulkApprove);
+router.post('/purge-removed', purgeRemovedRegistrations);
 router.get('/:id', getRegistration);
 router.patch('/:id', updateRegistration);
 router.post('/:id/approve', approveRegistration);

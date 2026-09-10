@@ -144,6 +144,10 @@ const processItem = async (
     return { status: 'ALREADY_ISSUED', ticketId: ticket.ticketId, error: null };
   }
 
+  if (issuance.kind === 'ISSUED') {
+    await Registration.updateOne({ _id: item.registrationId }, { $inc: { ticketsIssued: 1 } });
+  }
+
   const delivery = await deliverTicket(ticket);
   if (delivery.kind === 'SENT') {
     return {
