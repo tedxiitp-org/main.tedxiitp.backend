@@ -106,16 +106,43 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
   const greeting = name ? `Dear ${name},` : 'Dear Attendee,';
 
   const html = `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <style>
+      @media screen and (max-width: 600px) {
+        .responsive-table {
+          width: 100% !important;
+          background-image: radial-gradient(circle at top left, #f4f4f4 16px, transparent 17px), radial-gradient(circle at top right, #f4f4f4 16px, transparent 17px), radial-gradient(circle at bottom left, #f4f4f4 16px, transparent 17px), radial-gradient(circle at bottom right, #f4f4f4 16px, transparent 17px), linear-gradient(135deg, #000000 0%, #1a0000 60%, #4a0000 100%) !important;
+        }
+        .responsive-col {
+          display: block !important;
+          width: 100% !important;
+          box-sizing: border-box !important;
+        }
+        .qr-section {
+          border-left: none !important;
+          border-top: 2px dashed #444444 !important;
+          padding: 30px 20px !important;
+        }
+        .info-section {
+          padding: 30px 20px !important;
+        }
+      }
+    </style>
+  </head>
+  <body style="margin: 0; padding: 0; background-color: #f4f4f4;">
   <div style="font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; max-width: 650px; margin: 0 auto; background-color: #f4f4f4; padding: 30px 15px;">
     
     <p style="color: #111; font-size: 16px; margin-bottom: 25px; text-align: center;">${greeting} Here is your official entry ticket.</p>
     
     <!-- Ticket Container -->
-    <table width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto; background-color: #111111; background-image: radial-gradient(circle at top left, #f4f4f4 16px, transparent 17px), radial-gradient(circle at top right, #f4f4f4 16px, transparent 17px), radial-gradient(circle at bottom left, #f4f4f4 16px, transparent 17px), radial-gradient(circle at bottom right, #f4f4f4 16px, transparent 17px), radial-gradient(circle at 65% 0, #f4f4f4 14px, transparent 15px), radial-gradient(circle at 65% 100%, #f4f4f4 14px, transparent 15px), linear-gradient(135deg, #000000 0%, #1a0000 60%, #4a0000 100%); color: #ffffff; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.3);">
+    <table class="responsive-table" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width: 600px; margin: 0 auto; background-color: #111111; background-image: radial-gradient(circle at top left, #f4f4f4 16px, transparent 17px), radial-gradient(circle at top right, #f4f4f4 16px, transparent 17px), radial-gradient(circle at bottom left, #f4f4f4 16px, transparent 17px), radial-gradient(circle at bottom right, #f4f4f4 16px, transparent 17px), radial-gradient(circle at 65% 0, #f4f4f4 14px, transparent 15px), radial-gradient(circle at 65% 100%, #f4f4f4 14px, transparent 15px), linear-gradient(135deg, #000000 0%, #1a0000 60%, #4a0000 100%); color: #ffffff; overflow: hidden; box-shadow: 0 15px 35px rgba(0,0,0,0.3);">
       <tr>
         
         <!-- Left Side: Ticket Details -->
-        <td width="65%" valign="top" style="padding: 30px;">
+        <td class="responsive-col info-section" width="65%" valign="top" style="padding: 30px;">
           <h1 style="margin: 0; font-size: 28px; color: #e62b1e; font-weight: 800; letter-spacing: 1.5px;">TEDx<span style="color: #ffffff; font-weight: 300;">IITPatna</span></h1>
           <p style="margin: 5px 0 30px 0; font-size: 11px; color: #aaaaaa; text-transform: uppercase; letter-spacing: 3px;">Official Entry Ticket</p>
           
@@ -137,7 +164,7 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
         </td>
         
         <!-- Right Side: QR Code Stub -->
-        <td width="35%" align="center" valign="middle" style="padding: 30px 20px; background-color: rgba(0, 0, 0, 0.4); border-left: 2px dashed #444444;">
+        <td class="responsive-col qr-section" width="35%" align="center" valign="middle" style="padding: 30px 20px; background-color: rgba(0, 0, 0, 0.4); border-left: 2px dashed #444444;">
           <div style="background-color: #ffffff; padding: 10px; border-radius: 8px; display: inline-block;">
             <img src="cid:ticket-qr" alt="QR Code" width="140" height="140" style="display: block; border: 0;" />
           </div>
@@ -164,7 +191,7 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
       <ul style="padding-left: 20px; margin-top: 0;">
         <li style="margin-bottom: 8px;">All attendees must report to the venue for verification before the session begins.</li>
         <li style="margin-bottom: 8px;">Verification for Session ${getSessionNumber(session)} will begin from <strong>${getVerificationTiming(session)}</strong>. Please use the QR code sent to your registered email for verification.</li>
-        <li style="margin-bottom: 8px;">On-spot registration will be available for attendees who have not booked their tickets yet.</li>
+        <li style="margin-bottom: 8px;">On-spot registration will be available <b>"only for campus students."</b></li>
         <li style="margin-bottom: 8px;">No entries will be permitted once the session has started. We strongly recommend arriving well in advance.</li>
         <li style="margin-bottom: 8px;">At the time of registration/check-in, attendees are required to carry:
           <ul style="padding-left: 20px; margin-top: 5px;">
@@ -185,7 +212,9 @@ export const sendTicketEmail = async (input: TicketEmailInput): Promise<void> =>
     </div>
 
     <p style="color: #888888; font-size: 12px; margin-top: 25px; text-align: center; line-height: 1.5;">This ticket is unique to you. Do not share it.<br>It can only be checked in once.</p>
-  </div>`;
+  </div>
+  </body>
+  </html>`;
 
   const tx = await getTransporter();
   await tx.sendMail({
