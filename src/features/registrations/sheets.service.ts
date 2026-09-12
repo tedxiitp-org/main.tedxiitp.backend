@@ -189,6 +189,7 @@ export const fetchSheetRows = async (): Promise<string[][]> => {
   try {
     return await fetchServiceAccountRows();
   } catch (error) {
+    console.error('Service account fetch failed with error:', error);
     const rows = await fetchPublicSheetRows().catch(() => null);
     if (rows) {
       console.warn(
