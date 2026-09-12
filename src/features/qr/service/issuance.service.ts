@@ -3,7 +3,7 @@ import QRCode from 'qrcode';
 import type { Types } from 'mongoose';
 import { Ticket } from '../model/ticket.model.js';
 import type { ITicket } from '../model/ticket.model.js';
-import { nextTicketId } from './ticket-id.service.js';
+import { allocateTicket } from './ticket-id.service.js';
 import { sendTicketEmail, isEmailConfigured } from './email.service.js';
 import { env } from '../../../config/env.js';
 import type { Session } from '../../../shared/domain.js';
@@ -52,14 +52,24 @@ export const issueTicket = async (input: IssuanceInput): Promise<IssuanceOutcome
     return { kind: 'ALREADY_ISSUED', ticket: existing };
   }
 
-  const ticketId = await nextTicketId(input.session);
-  const qrToken = jwt.sign(
-    { ticketId, email, userId: email, session: input.session },
-    env.JWT_SECRET
-  );
+  const heldByAnotherRow = await Ticket.findOne({
+    email,
+    session: input.session,
+    status: { $ne: 'REVOKED' },
+  })
+    .select('ticketId')
+    .lean();
+
+  if (heldByAnotherRow) {
+    return {
+      kind: 'FAILED',
+      reason: `${email} already holds a ${input.session} ticket (${heldByAnotherRow.ticketId}) from a different registration row`,
+      permanent: true,
+    };
+  }
 
   try {
-    const ticket = await Ticket.create({
+    const ticket = await allocateTicket(input.session, (ticketId) => ({
       ticketId,
       registrationId: input.registrationId,
       email,
@@ -67,10 +77,13 @@ export const issueTicket = async (input: IssuanceInput): Promise<IssuanceOutcome
       userId: email,
       session: input.session,
       transactionId: input.transactionId,
-      qrToken,
+      qrToken: jwt.sign(
+        { ticketId, email, userId: email, session: input.session },
+        env.JWT_SECRET
+      ),
       status: 'ACTIVE',
       isCheckedIn: false,
-    });
+    }));
     return { kind: 'ISSUED', ticket };
   } catch (error) {
     if (isDuplicateKeyError(error)) {

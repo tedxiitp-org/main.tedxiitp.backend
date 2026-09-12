@@ -164,16 +164,30 @@ export const purgeRemoved = async (): Promise<number> => {
   return outcome.deletedCount;
 };
 
-export const markDuplicates = async (): Promise<number> => {
-  const groups = await Registration.aggregate<{ _id: string; ids: IRegistration['_id'][] }>([
-    { $match: { transactionId: { $nin: ['', null] } } },
+type DuplicateGroup = { _id: string; ids: IRegistration['_id'][] };
+
+const groupsByField = async (field: 'transactionId' | 'email'): Promise<DuplicateGroup[]> =>
+  Registration.aggregate<DuplicateGroup>([
+    { $match: { [field]: { $nin: ['', null] } } },
     { $sort: { submittedAt: 1, _id: 1 } },
-    { $group: { _id: '$transactionId', ids: { $push: '$_id' }, count: { $sum: 1 } } },
+    {
+      $group: {
+        _id: field === 'email' ? { $toLower: '$email' } : `$${field}`,
+        ids: { $push: '$_id' },
+        count: { $sum: 1 },
+      },
+    },
     { $match: { count: { $gt: 1 } } },
   ]);
 
+export const markDuplicates = async (): Promise<number> => {
+  const [byTransaction, byEmail] = await Promise.all([
+    groupsByField('transactionId'),
+    groupsByField('email'),
+  ]);
+
   let marked = 0;
-  for (const group of groups) {
+  for (const group of [...byTransaction, ...byEmail]) {
     const [primary, ...rest] = group.ids;
     if (!primary || rest.length === 0) continue;
     const outcome = await Registration.updateMany(

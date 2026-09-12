@@ -60,9 +60,36 @@ export const validateTicketScan = async (qrToken: string, scannedBy: string, cur
   );
 
   if (!updatedTicket) {
-    
+
     await logAttendance(ticketId, session, scannedBy, "FAILED_DUPLICATE");
     return { success: false, status: "FAILED_DUPLICATE", message: "Ticket already used!" };
+  }
+
+  const siblingAlreadyIn = await Ticket.findOne({
+    _id: { $ne: updatedTicket._id },
+    email: updatedTicket.email,
+    session: updatedTicket.session,
+    isCheckedIn: true,
+  })
+    .select('ticketId checkedInAt')
+    .lean();
+
+  if (
+    siblingAlreadyIn &&
+    siblingAlreadyIn.checkedInAt &&
+    updatedTicket.checkedInAt &&
+    siblingAlreadyIn.checkedInAt <= updatedTicket.checkedInAt
+  ) {
+    await Ticket.updateOne(
+      { _id: updatedTicket._id },
+      { $set: { isCheckedIn: false, checkedInAt: null, status: 'ACTIVE' } }
+    );
+    await logAttendance(ticketId, session, scannedBy, "FAILED_DUPLICATE");
+    return {
+      success: false,
+      status: "FAILED_DUPLICATE",
+      message: `${updatedTicket.email} already entered ${updatedTicket.session} on ticket ${siblingAlreadyIn.ticketId}.`,
+    };
   }
 
   // valid entry

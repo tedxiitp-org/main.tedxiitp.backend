@@ -114,8 +114,12 @@ export const getRegistrationStats = asyncHandler(async (_req: Request, res: Resp
     ]),
   ]);
 
-  const issuedTickets = await Ticket.countDocuments({ registrationId: { $ne: null } });
-  const emailedTickets = await Ticket.countDocuments({ emailedAt: { $ne: null } });
+  const [issuedTickets, emailedTickets, manualTickets, manualEmailedTickets] = await Promise.all([
+    Ticket.countDocuments({ registrationId: { $ne: null } }),
+    Ticket.countDocuments({ registrationId: { $ne: null }, emailedAt: { $ne: null } }),
+    Ticket.countDocuments({ registrationId: null }),
+    Ticket.countDocuments({ registrationId: null, emailedAt: { $ne: null } }),
+  ]);
 
   res.status(200).json({
     success: true,
@@ -125,6 +129,8 @@ export const getRegistrationStats = asyncHandler(async (_req: Request, res: Resp
       expectedTickets: totals[0]?.expectedTickets ?? 0,
       issuedTickets,
       emailedTickets,
+      manualTickets,
+      manualEmailedTickets,
       sheetsConfigured: isSheetsConfigured(),
       sheetsMode: sheetsMode(),
     },

@@ -1,9 +1,11 @@
 import type { Request, Response } from 'express';
+import type { QueryFilter } from 'mongoose';
 import { Ticket } from '../model/ticket.model.js';
+import type { ITicket } from '../model/ticket.model.js';
 import { generateTicketAndQR, DuplicateTicketError, DuplicateTransactionError } from '../service/qr.service.js';
 import { validateTicketScan, revokeTicket } from '../service/validation.service.js';
 import { getAttendanceStats, getVolunteerScanStats } from '../service/attendance.service.js';
-import { sendTicketEmail, isEmailConfigured } from '../service/email.service.js';
+import { isEmailConfigured } from '../service/email.service.js';
 import { deliverTicket } from '../service/issuance.service.js';
 import { Registration } from '../../registrations/registration.model.js';
 import { z } from 'zod';
@@ -17,32 +19,6 @@ const scanSchema = z.object({
 });
 
 type ValidSession = "SESSION_1" | "SESSION_2";
-
-// Try to email a ticket; never throws — returns the outcome so callers can
-// report it without failing ticket generation when SMTP is down/unconfigured.
-const tryEmailTicket = async (
-  to: string,
-  name: string | undefined,
-  ticketData: { ticketId: string; qrCode: string },
-  session: ValidSession
-): Promise<{ emailSent: boolean; emailError?: string }> => {
-  if (!isEmailConfigured()) {
-    return { emailSent: false, emailError: "Email not configured" };
-  }
-  try {
-    await sendTicketEmail({
-      to,
-      name,
-      ticketId: ticketData.ticketId,
-      session,
-      qrDataUrl: ticketData.qrCode,
-    });
-    return { emailSent: true };
-  } catch (err: unknown) {
-    console.error(`Failed to email ticket to ${to}:`, err instanceof Error ? err.message : err);
-    return { emailSent: false, emailError: err instanceof Error ? err.message : 'Send failed' };
-  }
-};
 
 export const generateTicket = async (req: Request, res: Response): Promise<Response | void> => {
   try {
@@ -317,10 +293,15 @@ export const deliverUnsentTickets = async (req: Request, res: Response): Promise
 
     const limit = Math.min(Math.max(Number(req.body?.limit ?? 25), 1), 100);
     const budgetMs = Math.min(Math.max(Number(req.body?.budgetMs ?? 8000), 1000), 60000);
+    const includeManual = req.body?.includeManual === true;
 
-    const pending = await Ticket.find({ emailedAt: null, status: { $ne: 'REVOKED' } })
-      .sort({ createdAt: 1 })
-      .limit(limit);
+    const filter: QueryFilter<ITicket> = {
+      emailedAt: null,
+      status: { $ne: 'REVOKED' },
+      ...(includeManual ? {} : { registrationId: { $ne: null } }),
+    };
+
+    const pending = await Ticket.find(filter).sort({ createdAt: 1 }).limit(limit);
 
     const startedAt = Date.now();
     let sent = 0;

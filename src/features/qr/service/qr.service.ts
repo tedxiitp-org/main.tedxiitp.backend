@@ -1,6 +1,6 @@
 import jwt from 'jsonwebtoken';
 import QRCode from 'qrcode';
-import { Counter } from '../model/counter.model.js';
+import { allocateTicket } from './ticket-id.service.js';
 import { Ticket } from '../model/ticket.model.js';
 
 export class DuplicateTicketError extends Error {
@@ -17,23 +17,6 @@ export class DuplicateTransactionError extends Error {
     this.name = 'DuplicateTransactionError';
   }
 }
-
-// generate Sequential ID based on session
-const generateTicketId = async (session: "SESSION_1" | "SESSION_2"): Promise<string> => {
-  // 81 for session 1 and 82 for 2nd
-  const counterKey = session === "SESSION_1" ? 'ticket_sequence_81' : 'ticket_sequence_82';
-  const sessionCode = session === "SESSION_1" ? "81" : "82";
- 
-  const counter = await Counter.findOneAndUpdate(
-    { key: counterKey },
-    { $inc: { sequence: 1 } },
-    { returnDocument: 'after', upsert: true } 
-  );
-
-  // pad the number with zeroes (1 becomes 0001)
-  const sequenceStr = counter.sequence.toString().padStart(4, '0');
-  return `TEDXIITP-26-${sessionCode}-${sequenceStr}`;
-};
 
 // generate and save the QR Code. The attendee is identified by their email,
 // which is unique per session — one ticket per email per session.
@@ -55,50 +38,46 @@ export const generateTicketAndQR = async (
 
   // (Transaction IDs can be duplicated if an attendee pays for multiple tickets or both sessions together)
 
-
-
-  const ticketId = await generateTicketId(session);
-
-  const payload = {
-    ticketId,
+  const existing = await Ticket.findOne({
     email: normalizedEmail,
+    session,
+    status: { $ne: 'REVOKED' },
+  })
+    .select('ticketId')
+    .lean();
+
+  if (existing) {
+    const label = session === 'SESSION_1' ? 'Session 1' : 'Session 2';
+    throw new DuplicateTicketError(
+      `${normalizedEmail} already has a ${label} ticket (${existing.ticketId}). Revoke it before issuing a new one.`
+    );
+  }
+
+  const newTicket = await allocateTicket(session, (ticketId) => ({
+    ticketId,
+    registrationId: null,
+    email: normalizedEmail,
+    name: cleanName ?? null,
     userId: normalizedEmail,
-    session
-  };
+    session,
+    transactionId,
+    qrToken: jwt.sign(
+      { ticketId, email: normalizedEmail, userId: normalizedEmail, session },
+      secret
+    ),
+    status: "ACTIVE",
+    isCheckedIn: false
+  }));
 
-  // sign the token
-  const qrToken = jwt.sign(payload, secret);
-
-
-  const qrImageURL = await QRCode.toDataURL(qrToken, {
+  const qrImageURL = await QRCode.toDataURL(newTicket.qrToken, {
     errorCorrectionLevel: 'H', // high for better scanning
     margin: 4,                 // larger quiet zone for reliable scanning
     width: 400                 // higher resolution base image
   });
 
-  // save the ticket to the database
-  try {
-    const newTicket = await Ticket.create({
-      ticketId,
-      email: normalizedEmail,
-      name: cleanName,
-      userId: normalizedEmail,
-      session,
-      transactionId,
-      qrToken,
-      status: "ACTIVE",
-      isCheckedIn: false
-    });
-
-    return {
-      ticketId: newTicket.ticketId,
-      qrCode: qrImageURL,
-      qrToken: qrToken
-    };
-  } catch (err: unknown) {
-    if (typeof err === 'object' && err !== null && (err as { code?: number }).code === 11000) {
-      // (Any index violations, though we removed unique transaction IDs)
-    }
-    throw err;
-  }
+  return {
+    ticketId: newTicket.ticketId,
+    qrCode: qrImageURL,
+    qrToken: newTicket.qrToken
+  };
 };
