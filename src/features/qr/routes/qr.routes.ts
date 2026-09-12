@@ -8,6 +8,7 @@ import {
   getVolunteerStats,
   handleRevoke,
   handleRevokeBulk,
+  deliverUnsentTickets,
 } from '../controller/qr.controller.js';
 import {
   createVolunteer,
@@ -32,6 +33,7 @@ router.patch('/admin/volunteers/:id', requireAuth, requireAdmin, updateVolunteer
 router.delete('/admin/volunteers/:id', requireAuth, requireAdmin, deleteVolunteer);
 
 router.post('/generate', requireAuth, requireAdmin, generateTicket);
+router.post('/admin/tickets/deliver-unsent', requireAuth, requireAdmin, deliverUnsentTickets);
 
 router.get('/me', requireAuth, (req, res) => {
   res.status(200).json({ success: true, data: req.principal });

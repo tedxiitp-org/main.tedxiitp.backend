@@ -68,6 +68,13 @@ const getTransporter = async (): Promise<Transporter> => {
     connectionTimeout: 10_000, // TCP connect
     greetingTimeout: 10_000,   // wait for server 220 greeting
     socketTimeout: 15_000,     // inactivity once connected
+    // Reuse connections instead of a fresh TCP+TLS+AUTH handshake per message,
+    // and let nodemailer enforce the send rate rather than a fixed sleep.
+    pool: true,
+    maxConnections: 3,
+    maxMessages: 100,
+    rateDelta: 60_000,
+    rateLimit: 40,
   } as SMTPTransport.Options;
 
   transporter = nodemailer.createTransport(options);

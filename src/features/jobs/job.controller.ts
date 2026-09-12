@@ -1,11 +1,20 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
 import { Job, JobItem } from './job.model.js';
-import { cancelJob, createJob, pumpJob, retryFailedItems } from './job.service.js';
+import {
+  cancelJob,
+  createJob,
+  previewBatch,
+  pumpJob,
+  retryFailedItems,
+} from './job.service.js';
 import { Registration } from '../registrations/registration.model.js';
 import { jobItemStatusSchema } from '../../shared/domain.js';
 import { asyncHandler, objectIdParam, parseWith, respondInvalid, toObjectId } from '../../shared/http.js';
 import { getPrincipalObjectId } from '../../shared/principal.js';
+import { timingSafeEqual } from 'node:crypto';
+import { Types } from 'mongoose';
+import { env } from '../../config/env.js';
 import { isEmailConfigured } from '../qr/service/email.service.js';
 
 const createSchema = z
@@ -19,8 +28,9 @@ const createSchema = z
   });
 
 const pumpSchema = z.object({
-  budgetMs: z.coerce.number().int().min(1000).max(120000).optional(),
+  budgetMs: z.coerce.number().int().min(1000).max(60000).optional(),
   throttleMs: z.coerce.number().int().min(0).max(10000).optional(),
+  concurrency: z.coerce.number().int().min(1).max(8).optional(),
 });
 
 const itemsQuerySchema = z.object({
@@ -77,7 +87,8 @@ export const createTicketJob = asyncHandler(async (req: Request, res: Response) 
       data: {
         jobId: result.job._id.toString(),
         totalItems: result.itemsCreated,
-        registrationsSkipped: result.registrationsSkipped,
+        alreadyDelivered: result.alreadyDelivered,
+        missingEmail: result.missingEmail,
       },
     });
   } catch (error) {
@@ -99,7 +110,12 @@ export const pumpTicketJob = asyncHandler(async (req: Request, res: Response) =>
   }
 
   try {
-    const result = await pumpJob(id, parsed.data.budgetMs, parsed.data.throttleMs);
+    const result = await pumpJob(
+      id,
+      parsed.data.budgetMs,
+      parsed.data.throttleMs,
+      parsed.data.concurrency
+    );
     res.status(200).json({ success: true, data: result });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Batch step failed';
@@ -167,4 +183,42 @@ export const cancelTicketJob = asyncHandler(async (req: Request, res: Response) 
   }
   await cancelJob(id);
   res.status(200).json({ success: true });
+});
+
+const approvedRegistrationIds = async (): Promise<Types.ObjectId[]> => {
+  const approved = await Registration.find({ status: 'APPROVED' }).select('_id').lean();
+  return approved.map((row) => row._id);
+};
+
+export const previewTicketBatch = asyncHandler(async (_req: Request, res: Response) => {
+  const preview = await previewBatch(await approvedRegistrationIds());
+  res.status(200).json({ success: true, data: preview });
+});
+
+export const pumpActiveJob = asyncHandler(async (req: Request, res: Response) => {
+  const secret = env.JOB_RUNNER_SECRET;
+  if (!secret) {
+    res.status(503).json({ error: 'Job runner is not enabled. Set JOB_RUNNER_SECRET.' });
+    return;
+  }
+
+  const provided = req.get('x-runner-secret') ?? '';
+  const expected = Buffer.from(secret);
+  const actual = Buffer.from(provided);
+  if (expected.length !== actual.length || !timingSafeEqual(expected, actual)) {
+    res.status(401).json({ error: 'Invalid runner secret' });
+    return;
+  }
+
+  const job = await Job.findOne({ status: { $in: ['PENDING', 'RUNNING'] } })
+    .sort({ createdAt: 1 })
+    .lean();
+
+  if (!job) {
+    res.status(200).json({ success: true, data: { idle: true } });
+    return;
+  }
+
+  const result = await pumpJob(job._id);
+  res.status(200).json({ success: true, data: result });
 });

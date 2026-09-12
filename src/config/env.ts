@@ -29,6 +29,7 @@ const envSchema = z.object({
   SMTP_PASS: z.string().optional(),
   SMTP_FROM: z.string().default('TEDxIIT Patna <no-reply@tedxiitpatna.iitp.ac.in>'),
   SHEET_WEBHOOK_SECRET: z.string().optional(),
+  JOB_RUNNER_SECRET: z.string().optional(),
   GOOGLE_SHEETS_ID: z.string().optional(),
   GOOGLE_SHEETS_RANGE: z.string().default('Form Responses 1'),
   GOOGLE_SHEETS_GID: z.string().default('0'),

@@ -2,6 +2,8 @@ import { Router } from 'express';
 import { requireAuth, requireAdmin } from '../../middleware/auth.middleware.js';
 import {
   cancelTicketJob,
+  previewTicketBatch,
+  pumpActiveJob,
   createTicketJob,
   getJob,
   listJobs,
@@ -11,9 +13,12 @@ import {
 
 const router = Router();
 
+router.post('/pump-active', pumpActiveJob);
+
 router.use(requireAuth, requireAdmin);
 
 router.get('/', listJobs);
+router.get('/preview', previewTicketBatch);
 router.post('/', createTicketJob);
 router.get('/:id', getJob);
 router.post('/:id/pump', pumpTicketJob);

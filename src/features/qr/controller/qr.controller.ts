@@ -4,6 +4,8 @@ import { generateTicketAndQR, DuplicateTicketError, DuplicateTransactionError } 
 import { validateTicketScan, revokeTicket } from '../service/validation.service.js';
 import { getAttendanceStats, getVolunteerScanStats } from '../service/attendance.service.js';
 import { sendTicketEmail, isEmailConfigured } from '../service/email.service.js';
+import { deliverTicket } from '../service/issuance.service.js';
+import { Registration } from '../../registrations/registration.model.js';
 import { z } from 'zod';
 import { getPrincipal } from '../../../shared/principal.js';
 import { canScanSession } from '../../../middleware/auth.middleware.js';
@@ -58,12 +60,36 @@ export const generateTicket = async (req: Request, res: Response): Promise<Respo
 
     const ticketData = await generateTicketAndQR(email, validSession, transactionId, name);
 
-    const emailResult = await tryEmailTicket(email, name, ticketData, validSession);
+    const normalizedEmail = String(email).trim().toLowerCase();
+    const registration = await Registration.findOne({
+      email: normalizedEmail,
+      status: 'APPROVED',
+    })
+      .select('_id')
+      .lean();
+
+    if (registration) {
+      await Ticket.updateOne(
+        { ticketId: ticketData.ticketId },
+        { $set: { registrationId: registration._id } }
+      );
+    }
+
+    const ticket = await Ticket.findOne({ ticketId: ticketData.ticketId });
+    if (!ticket) {
+      return res.status(500).json({ success: false, error: "Ticket could not be loaded after creation" });
+    }
+
+    const delivery = await deliverTicket(ticket);
 
     return res.status(201).json({
       success: true,
       message: "Secure ticket generated successfully",
-      data: { ...ticketData, ...emailResult }
+      data: {
+        ...ticketData,
+        emailSent: delivery.kind === 'SENT',
+        emailError: delivery.kind === 'SENT' ? undefined : delivery.reason,
+      },
     });
 
   } catch (error: unknown) {
@@ -281,5 +307,45 @@ export const exportAttendees = async (req: Request, res: Response): Promise<Resp
   } catch (error) {
     console.error("Export Attendees Error:", error);
     return res.status(500).json({ success: false, error: "Failed to export attendees" });
+  }
+};
+export const deliverUnsentTickets = async (req: Request, res: Response): Promise<Response | void> => {
+  try {
+    if (!isEmailConfigured()) {
+      return res.status(400).json({ error: "Email is not configured" });
+    }
+
+    const limit = Math.min(Math.max(Number(req.body?.limit ?? 25), 1), 100);
+    const budgetMs = Math.min(Math.max(Number(req.body?.budgetMs ?? 8000), 1000), 60000);
+
+    const pending = await Ticket.find({ emailedAt: null, status: { $ne: 'REVOKED' } })
+      .sort({ createdAt: 1 })
+      .limit(limit);
+
+    const startedAt = Date.now();
+    let sent = 0;
+    let failed = 0;
+    const errors: string[] = [];
+
+    for (const ticket of pending) {
+      if (Date.now() - startedAt > budgetMs) break;
+      const outcome = await deliverTicket(ticket);
+      if (outcome.kind === 'SENT') {
+        sent += 1;
+      } else {
+        failed += 1;
+        errors.push(`${ticket.ticketId}: ${outcome.reason}`);
+      }
+    }
+
+    const remaining = await Ticket.countDocuments({ emailedAt: null, status: { $ne: 'REVOKED' } });
+
+    return res.status(200).json({
+      success: true,
+      data: { sent, failed, remaining, errors: errors.slice(0, 10) },
+    });
+  } catch (error) {
+    console.error("Deliver unsent tickets error:", error);
+    return res.status(500).json({ success: false, error: "Internal Server Error" });
   }
 };
