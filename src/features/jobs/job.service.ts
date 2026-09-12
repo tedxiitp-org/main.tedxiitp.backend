@@ -217,7 +217,12 @@ const claimNextItem = async (jobId: Types.ObjectId): Promise<IJobItem | null> =>
 
 const processItem = async (
   item: IJobItem
-): Promise<{ status: IJobItem['status']; ticketId: string | null; error: string | null }> => {
+): Promise<{
+  status: IJobItem['status'];
+  ticketId: string | null;
+  error: string | null;
+  permanent?: boolean;
+}> => {
   const registration = await Registration.findById(item.registrationId)
     .select('email name transactionId status')
     .lean();
@@ -241,7 +246,12 @@ const processItem = async (
   });
 
   if (issuance.kind === 'FAILED') {
-    return { status: 'FAILED', ticketId: null, error: issuance.reason };
+    return {
+      status: 'FAILED',
+      ticketId: null,
+      error: issuance.reason,
+      permanent: issuance.permanent,
+    };
   }
 
   const ticket = issuance.ticket;
@@ -322,7 +332,8 @@ export const pumpJob = async (
 
   const settleItem = async (item: IJobItem): Promise<void> => {
     const outcome = await processItem(item);
-    const isRetryableFailure = outcome.status === 'FAILED' && item.attempts < MAX_ATTEMPTS;
+    const isRetryableFailure =
+      outcome.status === 'FAILED' && !outcome.permanent && item.attempts < MAX_ATTEMPTS;
 
     await JobItem.updateOne(
       { _id: item._id },

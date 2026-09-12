@@ -19,9 +19,15 @@ export interface IssuanceInput {
 export type IssuanceOutcome =
   | { kind: 'ISSUED'; ticket: ITicket }
   | { kind: 'ALREADY_ISSUED'; ticket: ITicket }
-  | { kind: 'FAILED'; reason: string };
+  | { kind: 'FAILED'; reason: string; permanent: boolean };
 
 const DUPLICATE_KEY_ERROR = 11000;
+
+const isValidationError = (error: unknown): boolean =>
+  typeof error === 'object' &&
+  error !== null &&
+  'name' in error &&
+  (error as { name?: string }).name === 'ValidationError';
 
 const isDuplicateKeyError = (error: unknown): boolean =>
   typeof error === 'object' &&
@@ -35,7 +41,7 @@ export const buildQrDataUrl = async (qrToken: string): Promise<string> =>
 export const issueTicket = async (input: IssuanceInput): Promise<IssuanceOutcome> => {
   const email = input.email.trim().toLowerCase();
   if (!email) {
-    return { kind: 'FAILED', reason: 'Registration has no email address' };
+    return { kind: 'FAILED', reason: 'Registration has no email address', permanent: true };
   }
 
   const existing = await Ticket.findOne({
@@ -77,7 +83,7 @@ export const issueTicket = async (input: IssuanceInput): Promise<IssuanceOutcome
       }
     }
     const reason = error instanceof Error ? error.message : 'Ticket creation failed';
-    return { kind: 'FAILED', reason };
+    return { kind: 'FAILED', reason, permanent: isValidationError(error) };
   }
 };
 
